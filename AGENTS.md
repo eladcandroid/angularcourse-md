@@ -20,3 +20,5 @@ Craft commit messages in the imperative mood with concise context (`add signals 
 
 ## Content Review Checklist
 Before merging, confirm terminology matches current Angular releases, update any version numbers, and ensure internal links resolve. Verify diagrams or ASCII trees stay under 80 characters in width for readability. Keep learner takeaways actionable and end each lesson with a short recap or next steps section.
+
+Use Angular CLI MCP to fetch all the updated docs you need for Angular

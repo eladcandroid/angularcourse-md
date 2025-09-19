@@ -3923,3 +3923,7 @@ Key takeaways:
 8. Perfect foundation for zoneless Angular applications
 
 Signals represent the present and future of reactive programming in Angular and provide a solid foundation for building modern, performant web applications with optimal change detection performance.
+
+## Next Steps
+
+Reinforce these concepts by completing the [Signals practice exercises](exercise-signals.md), where you will build counters, cart summaries, effects-driven preferences, and signal-based component communication.

@@ -1795,3 +1795,7 @@ export class MaterialFormComponent {
 - **Modern Build Tools** (Vite/ESBuild) dramatically improve development experience
 
 This overview provides a comprehensive foundation for understanding Angular's evolution and implementing modern Angular applications using the latest features and best practices.
+
+### Related Resources
+
+- Review the [Component lifecycle diagram](component-lifecycle.md) to align version upgrades with the hook sequence your components rely on.

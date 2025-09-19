@@ -1,0 +1,77 @@
+
+Okay, I have reviewed the content of `lesson-signals.md`, `exercise1.md`, and `exercise2.md`.
+
+*   `lesson-signals.md` provides a comprehensive overview of Angular Signals, including `signal`, `computed`, `effect`, inputs, outputs, model inputs, queries, and the resource API.
+*   `exercise1.md` and `exercise2.md` are more high-level and architectural, focusing on application structure and design patterns rather than small, focused code tasks. They provide a title and a list of requirements.
+
+Based on this, I will propose a plan for `exercise-signals.md` that creates smaller, more focused exercises that directly map to the concepts in `lesson-signals.md`. This will provide a better learning progression for the user.
+
+Here is the plan:
+
+### Plan for `exercise-signals.md`
+
+The new exercise file will contain a series of focused, hands-on exercises that build on each other, allowing learners to practice the core concepts of Angular Signals as taught in `lesson-signals.md`.
+
+---
+
+**1. Proposed Sections**
+
+The file will be structured into clear, progressive sections:
+
+1.  **Introduction**: Briefly explain the goal of the exercises.
+2.  **Exercise 1: Your First Signal - A Simple Counter**: Focus on creating, reading, and updating a basic `signal`.
+3.  **Exercise 2: Derived State with `computed` - A Shopping Cart**: Practice creating `computed` signals that derive state from other signals.
+4.  **Exercise 3: Side Effects with `effect` - Logging User Actions**: Learn how to use `effect` to run side effects in response to signal changes.
+5.  **Exercise 4: Putting It All Together - A "To-Do" List**: A slightly larger exercise combining `signal`, `computed`, and `effect` to build a small, functional piece of an application.
+6.  **Solutions**: A section at the end with complete, working code for each exercise.
+
+**2. Structure for Each Exercise**
+
+Each exercise will follow a consistent and clear format:
+
+*   **Objective**: A one-sentence summary of what the learner will achieve.
+*   **Instructions**: A clear, step-by-step prompt guiding the user.
+*   **Starter Code**: A pre-filled Angular component snippet for the user to modify. This saves time and focuses the exercise on the target concept.
+*   **Expected Outcome**: A description of how the component should behave after the exercise is completed correctly.
+*   **Bonus (Optional)**: An extra challenge to encourage further exploration.
+
+**3. Code Snippets & Level Progression**
+
+The exercises will start simple and gradually introduce more complexity.
+
+*   **Exercise 1 (Beginner)**:
+    *   **Concept**: `signal()`, `.set()`, `.update()`.
+    *   **Task**: Create a counter component with increment, decrement, and reset functionality.
+    *   **Starter Code**: A component with a `count` signal initialized to `0` and empty methods.
+
+*   **Exercise 2 (Intermediate)**:
+    *   **Concept**: `computed()`.
+    *   **Task**: Create a shopping cart that has a signal for items and uses `computed` to calculate the total number of items and the total price.
+    *   **Starter Code**: A component with an `items` signal (an array of objects with `price` and `quantity`).
+
+*   **Exercise 3 (Intermediate)**:
+    *   **Concept**: `effect()`.
+    *   **Task**: Create a component that logs a message to the console whenever a user's name signal changes.
+    *   **Starter Code**: A component with a `userName` signal and an input field to change it.
+
+*   **Exercise 4 (Advanced)**:
+    *   **Concept**: Combination of all previous concepts.
+    *   **Task**: Build a simple to-do list where users can add items. Use `signal` for the list, and `computed` to derive statistics (e.g., number of completed items). An `effect` could be used to log the list state to local storage.
+    *   **Starter Code**: A component with an empty `todos` signal and an input field for adding new to-dos.
+
+**4. Review Checklist**
+
+Before finalizing the file, I will use this checklist:
+
+*   [ ] Are the instructions for each exercise clear and unambiguous?
+*   [ ] Does the starter code provide enough context without giving away the solution?
+*   [ ] Does each exercise directly correspond to a topic in `lesson-signals.md`?
+*   [ ] Is the level progression logical?
+*   [ ] Are the solutions correct, complete, and well-formatted?
+*   [ ] Does the overall file format match the style of `exercise1.md` and `exercise2.md` (e.g., use of headings, code blocks)?
+
+**5. Supporting Assets**
+
+*   No external assets are needed. All exercises will be self-contained within the markdown file, using standard Angular and TypeScript code snippets.
+
+This plan provides a clear path to creating an engaging and effective exercise file for Angular Signals that aligns with the existing course structure.
