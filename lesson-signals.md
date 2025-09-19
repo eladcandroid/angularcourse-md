@@ -1,0 +1,1541 @@
+# Angular Signals
+
+## Topic Overview
+
+Angular Signals is a stable reactive programming system (as of Angular 20) that provides fine-grained reactivity for managing state in Angular applications. Signals represent values that can change over time and automatically notify interested consumers when they change.
+
+### What are Signals?
+
+A signal is a wrapper around a value that notifies interested consumers when that value changes. Signals can contain any value, from primitives to complex data structures. You read a signal's value by calling its getter function, which allows Angular to track where the signal is used.
+
+### Key Benefits
+
+- **Fine-grained reactivity**: Only components that depend on changed signals are updated
+- **Automatic dependency tracking**: Angular automatically tracks which signals your code reads
+- **Improved performance**: More efficient change detection, especially with zoneless mode
+- **Better developer experience**: Type-safe reactive state management
+- **Simplified debugging**: Clear dependency graphs and predictable updates
+- **Zoneless compatibility**: Works seamlessly with Angular's zoneless change detection
+
+### Why Use Signals?
+
+Signals enable Angular to optimize rendering updates by tracking exactly which parts of your application depend on specific pieces of data. When a signal changes, only the components and computations that actually use that signal are updated, leading to better performance and more predictable behavior.
+
+## Basic Signals
+
+### Creating Signals
+
+Use the `signal()` function to create a writable signal:
+
+```typescript
+import { signal } from '@angular/core';
+
+// Create a signal with an initial value
+const count = signal(0);
+const userName = signal('Guest');
+const isLoading = signal(false);
+```
+
+### Reading Signal Values
+
+Signals are functions - call them to read their current value:
+
+```typescript
+// Read the current value
+console.log(`Count is: ${count()}`);
+console.log(`User: ${userName()}`);
+console.log(`Loading: ${isLoading()}`);
+```
+
+### Updating Signal Values
+
+Use `.set()` to replace the value completely:
+
+```typescript
+count.set(10);
+userName.set('John Doe');
+isLoading.set(true);
+```
+
+Use `.update()` to compute a new value based on the current value:
+
+```typescript
+// Increment count by 1
+count.update(current => current + 1);
+
+// Capitalize username
+userName.update(current => current.toUpperCase());
+
+// Toggle loading state
+isLoading.update(current => !current);
+```
+
+### Component Example
+
+```typescript
+import { Component, signal, ChangeDetectionStrategy } from '@angular/core';
+
+@Component({
+  selector: 'app-counter',
+  changeDetection: ChangeDetectionStrategy.OnPush, // Recommended with signals
+  template: `
+    <div>
+      <p>Count: {{ count() }}</p>
+      <button (click)="increment()">+</button>
+      <button (click)="decrement()">-</button>
+      <button (click)="reset()">Reset</button>
+    </div>
+  `
+})
+export class CounterComponent {
+  count = signal(0);
+
+  increment() {
+    this.count.update(value => value + 1);
+  }
+
+  decrement() {
+    this.count.update(value => value - 1);
+  }
+
+  reset() {
+    this.count.set(0);
+  }
+}
+```
+
+## Computed Signals
+
+Computed signals are read-only signals that derive their value from other signals. They automatically recalculate when their dependencies change.
+
+### Creating Computed Signals
+
+```typescript
+import { signal, computed } from '@angular/core';
+
+const firstName = signal('John');
+const lastName = signal('Doe');
+
+// Computed signal that combines first and last name
+const fullName = computed(() => `${firstName()} ${lastName()}`);
+
+console.log(fullName()); // "John Doe"
+
+// When dependencies change, computed automatically updates
+firstName.set('Jane');
+console.log(fullName()); // "Jane Doe"
+```
+
+### Lazy Evaluation and Memoization
+
+Computed signals are lazy (only calculated when read) and memoized (cached until dependencies change):
+
+```typescript
+const expensiveComputation = computed(() => {
+  console.log('Computing...'); // Only logs when recalculation is needed
+  const items = itemList();
+  return items.filter(item => item.active).length;
+});
+
+// First read - computation runs
+console.log(expensiveComputation()); // Logs "Computing..." then result
+
+// Second read - uses cached value
+console.log(expensiveComputation()); // Just returns cached result
+
+// After itemList changes - computation runs again on next read
+```
+
+### Dynamic Dependencies
+
+Computed signals only track signals that are actually read during execution:
+
+```typescript
+const showDetails = signal(false);
+const userName = signal('John');
+const userEmail = signal('john@example.com');
+
+const displayText = computed(() => {
+  if (showDetails()) {
+    return `${userName()} (${userEmail()})`;
+  } else {
+    return userName();
+  }
+});
+
+// Initially, only userName and showDetails are dependencies
+// userEmail becomes a dependency only when showDetails is true
+```
+
+### Component Example
+
+```typescript
+import { Component, signal, computed, ChangeDetectionStrategy } from '@angular/core';
+
+interface CartItem {
+  id: number;
+  name: string;
+  price: number;
+  quantity: number;
+}
+
+@Component({
+  selector: 'app-shopping-cart',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <div>
+      <h3>Shopping Cart</h3>
+      <p>Items: {{ itemCount() }}</p>
+      <p>Total: ${{ totalPrice() }}</p>
+      <p>Average: ${{ averagePrice() }}</p>
+    </div>
+  `
+})
+export class ShoppingCartComponent {
+  items = signal<CartItem[]>([
+    { id: 1, name: 'Book', price: 20, quantity: 2 },
+    { id: 2, name: 'Pen', price: 5, quantity: 3 }
+  ]);
+
+  itemCount = computed(() =>
+    this.items().reduce((total, item) => total + item.quantity, 0)
+  );
+
+  totalPrice = computed(() =>
+    this.items().reduce((total, item) => total + (item.price * item.quantity), 0)
+  );
+
+  averagePrice = computed(() => {
+    const total = this.totalPrice();
+    const count = this.itemCount();
+    return count > 0 ? total / count : 0;
+  });
+}
+```
+
+## Effects
+
+Effects are operations that run whenever one or more signal values change. They're useful for side effects like logging, local storage synchronization, or DOM manipulation.
+
+### Creating Effects
+
+```typescript
+import { effect } from '@angular/core';
+
+const count = signal(0);
+
+// Effect runs whenever count changes
+effect(() => {
+  console.log(`Count changed to: ${count()}`);
+});
+
+// Effect runs immediately (logs "Count changed to: 0")
+// Then runs again whenever count.set() or count.update() is called
+```
+
+### Effect Use Cases
+
+#### Logging and Analytics
+
+```typescript
+effect(() => {
+  const user = currentUser();
+  const page = currentPage();
+  analytics.track('page_view', { user: user.id, page });
+});
+```
+
+#### Local Storage Synchronization
+
+```typescript
+effect(() => {
+  const preferences = userPreferences();
+  localStorage.setItem('preferences', JSON.stringify(preferences));
+});
+```
+
+#### DOM Manipulation
+
+```typescript
+effect(() => {
+  const theme = selectedTheme();
+  document.body.className = `theme-${theme}`;
+});
+```
+
+### Injection Context
+
+Effects must be created within an injection context (component, directive, or service constructor):
+
+```typescript
+@Component({
+  selector: 'app-user-profile'
+})
+export class UserProfileComponent {
+  userName = signal('');
+
+  constructor() {
+    //  Correct - in constructor (injection context)
+    effect(() => {
+      console.log(`User: ${this.userName()}`);
+    });
+  }
+
+  //  Alternative - as a field
+  private loggingEffect = effect(() => {
+    console.log(`User: ${this.userName()}`);
+  });
+}
+```
+
+### Effect Cleanup
+
+Effects can register cleanup functions for handling subscriptions or timers:
+
+```typescript
+effect((onCleanup) => {
+  const user = currentUser();
+
+  const timer = setTimeout(() => {
+    console.log(`User ${user.name} has been active for 5 seconds`);
+  }, 5000);
+
+  // Cleanup function runs before the next effect execution or when destroyed
+  onCleanup(() => {
+    clearTimeout(timer);
+  });
+});
+```
+
+### Best Practices for Effects
+
+- Use effects sparingly - prefer computed signals for derived state
+- Avoid creating infinite loops by not writing to signals that the effect reads
+- Use cleanup functions for subscriptions and timers
+- Keep effects simple and focused
+- Effects automatically integrate with Angular's change detection (no manual detectChanges needed)
+- In zoneless mode, effects work seamlessly without Zone.js
+
+```typescript
+// L Avoid - can cause infinite loops
+effect(() => {
+  const value = mySignal();
+  mySignal.set(value + 1); // Writes to the signal it reads!
+});
+
+//  Good - effect for side effects only
+effect(() => {
+  const value = mySignal();
+  console.log('Value changed:', value);
+});
+```
+
+## Signal Inputs
+
+Signal inputs provide a stable, modern, type-safe way to accept data from parent components using the reactive power of signals. As of Angular 20, signal inputs are the recommended approach for component inputs.
+
+### Basic Signal Inputs
+
+```typescript
+import { Component, input } from '@angular/core';
+
+@Component({
+  selector: 'app-user-card',
+  template: `
+    <div class="user-card">
+      <h3>{{ name() }}</h3>
+      <p>Age: {{ age() }}</p>
+      <p>Email: {{ email() }}</p>
+    </div>
+  `
+})
+export class UserCardComponent {
+  // Input with default value - type inferred as string
+  name = input('Unknown User');
+
+  // Input with explicit type - value can be undefined
+  age = input<number>();
+
+  // Input with default value and explicit type
+  email = input<string>('no-email@example.com');
+}
+```
+
+### Required Inputs
+
+```typescript
+@Component({
+  selector: 'app-product-card',
+  template: `
+    <div>
+      <h3>{{ name() }}</h3>
+      <p>{{ description() }}</p>
+      <p>${{ price() }}</p>
+    </div>
+  `
+})
+export class ProductCardComponent {
+  // Required inputs must be provided by parent
+  name = input.required<string>();
+  price = input.required<number>();
+
+  // Optional input with default
+  description = input('No description available');
+}
+```
+
+### Using Signal Inputs
+
+```typescript
+// Parent component template
+@Component({
+  template: `
+    <app-user-card
+      [name]="userName()"
+      [age]="userAge()"
+      [email]="userEmail()">
+    </app-user-card>
+
+    <app-product-card
+      [name]="productName()"
+      [price]="productPrice()">
+    </app-product-card>
+  `
+})
+export class ParentComponent {
+  userName = signal('Alice Johnson');
+  userAge = signal(28);
+  userEmail = signal('alice@example.com');
+
+  productName = signal('Laptop');
+  productPrice = signal(999);
+}
+```
+
+### Input Transforms
+
+Transform input values automatically:
+
+```typescript
+import { Component, input, numberAttribute, booleanAttribute } from '@angular/core';
+
+@Component({
+  selector: 'app-form-field',
+  template: `
+    <div class="form-field" [class.disabled]="disabled()">
+      <label>{{ label() }}</label>
+      <input [value]="maxLength()" [disabled]="disabled()">
+    </div>
+  `
+})
+export class FormFieldComponent {
+  // String input that trims whitespace
+  label = input('', {
+    transform: (value: string) => value.trim()
+  });
+
+  // Transform string to number
+  maxLength = input(100, {
+    transform: numberAttribute
+  });
+
+  // Transform to boolean (handles "true"/"false" strings)
+  disabled = input(false, {
+    transform: booleanAttribute
+  });
+}
+```
+
+### Reading Inputs in Components
+
+Signal inputs can be used in computed signals and effects:
+
+```typescript
+@Component({
+  selector: 'app-user-profile',
+  template: `
+    <div>
+      <h2>{{ displayName() }}</h2>
+      <p>Status: {{ statusMessage() }}</p>
+    </div>
+  `
+})
+export class UserProfileComponent {
+  firstName = input.required<string>();
+  lastName = input.required<string>();
+  isOnline = input(false);
+
+  // Computed signal derived from inputs
+  displayName = computed(() =>
+    `${this.firstName()} ${this.lastName()}`
+  );
+
+  statusMessage = computed(() =>
+    this.isOnline() ? 'Online' : 'Offline'
+  );
+
+  constructor() {
+    // Effect that runs when inputs change
+    effect(() => {
+      console.log(`${this.displayName()} is ${this.statusMessage()}`);
+    });
+  }
+}
+```
+
+## Model Inputs
+
+Model inputs enable two-way data binding between parent and child components using signals. They allow a component to both receive values from and send values back to its parent.
+
+### Basic Model Inputs
+
+```typescript
+import { Component, model } from '@angular/core';
+
+@Component({
+  selector: 'app-custom-input',
+  template: `
+    <div class="custom-input">
+      <label>{{ label() }}</label>
+      <input
+        [value]="value()"
+        (input)="updateValue($event)"
+        [placeholder]="placeholder()">
+    </div>
+  `
+})
+export class CustomInputComponent {
+  // Model input for two-way binding
+  value = model<string>('');
+
+  // Regular inputs
+  label = input('Input Field');
+  placeholder = input('Enter text...');
+
+  updateValue(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.value.set(target.value);
+  }
+}
+```
+
+### Using Model Inputs with Two-Way Binding
+
+```typescript
+@Component({
+  selector: 'app-form',
+  template: `
+    <div>
+      <app-custom-input
+        [(value)]="userName"
+        [label]="'Username'"
+        [placeholder]="'Enter your username'">
+      </app-custom-input>
+
+      <app-custom-input
+        [(value)]="email"
+        [label]="'Email'"
+        [placeholder]="'Enter your email'">
+      </app-custom-input>
+
+      <p>Username: {{ userName() }}</p>
+      <p>Email: {{ email() }}</p>
+    </div>
+  `
+})
+export class FormComponent {
+  userName = signal('');
+  email = signal('');
+}
+```
+
+### Advanced Model Input Example
+
+```typescript
+@Component({
+  selector: 'app-counter-control',
+  template: `
+    <div class="counter-control">
+      <button (click)="decrement()" [disabled]="value() <= min()">-</button>
+      <span class="value">{{ value() }}</span>
+      <button (click)="increment()" [disabled]="value() >= max()">+</button>
+      <p class="range">Range: {{ min() }} - {{ max() }}</p>
+    </div>
+  `
+})
+export class CounterControlComponent {
+  // Model input for the main value
+  value = model(0);
+
+  // Configuration inputs
+  min = input(0);
+  max = input(100);
+  step = input(1);
+
+  increment() {
+    const current = this.value();
+    const newValue = Math.min(current + this.step(), this.max());
+    this.value.set(newValue);
+  }
+
+  decrement() {
+    const current = this.value();
+    const newValue = Math.max(current - this.step(), this.min());
+    this.value.set(newValue);
+  }
+}
+```
+
+### Implicit Change Events
+
+Model inputs automatically create change events:
+
+```typescript
+// Child component with model
+@Component({
+  selector: 'app-slider',
+  template: `<input type="range" [value]="value()" (input)="onChange($event)">`
+})
+export class SliderComponent {
+  // Creates automatic "valueChange" event
+  value = model(50);
+
+  onChange(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.value.set(Number(target.value));
+  }
+}
+
+// Parent can listen to the automatic change event
+@Component({
+  template: `
+    <app-slider
+      [(value)]="sliderValue"
+      (valueChange)="onSliderChange($event)">
+    </app-slider>
+  `
+})
+export class ParentComponent {
+  sliderValue = signal(50);
+
+  onSliderChange(newValue: number) {
+    console.log('Slider changed to:', newValue);
+  }
+}
+```
+
+### When to Use Model Inputs
+
+Use model inputs when:
+- Creating custom form controls
+- Building reusable components that need to modify parent state
+- Implementing components that act as input/output pairs
+- You need two-way data binding between parent and child
+
+Examples of good use cases:
+- Custom date pickers
+- Toggle switches
+- Sliders and range inputs
+- Search boxes with filters
+- Any component that acts as a form control
+
+## Advanced Topics
+
+### Signal Equality Functions
+
+By default, signals use `Object.is()` for equality checking. You can provide custom equality functions:
+
+```typescript
+import { signal } from '@angular/core';
+import { isEqual } from 'lodash-es';
+
+// Custom equality for deep object comparison
+const userSettings = signal(
+  { theme: 'dark', language: 'en' },
+  { equal: isEqual }
+);
+
+// This won't trigger updates because the objects are deeply equal
+userSettings.set({ theme: 'dark', language: 'en' });
+
+// Custom equality for arrays
+const items = signal(
+  [1, 2, 3],
+  { equal: (a, b) => a.length === b.length && a.every((v, i) => v === b[i]) }
+);
+```
+
+### Reading Without Tracking Dependencies
+
+Use `untracked()` to read signals without creating dependencies:
+
+```typescript
+import { effect, signal, untracked } from '@angular/core';
+
+const user = signal({ name: 'John', id: 1 });
+const debugMode = signal(false);
+
+effect(() => {
+  const currentUser = user();
+
+  // Read debugMode without making it a dependency
+  if (untracked(debugMode)) {
+    console.log('User changed:', currentUser);
+  }
+
+  // This effect only runs when user() changes, not when debugMode changes
+});
+```
+
+### Performance Optimization
+
+#### Why OnPush with Signals?
+
+You might wonder: "If signals provide fine-grained reactivity, why do I still need OnPush?" This is a common question with an important answer.
+
+**Signals Don't Eliminate Change Detection - They Optimize It**
+
+Even with signals, Angular still runs change detection cycles. OnPush ensures your component is only checked when necessary:
+
+```typescript
+// ❌ Without OnPush - checked on every CD cycle
+@Component({
+  selector: 'app-counter',
+  // Default change detection - component checked on every CD cycle
+  template: `<p>Count: {{ count() }}</p>`
+})
+export class CounterComponent {
+  count = signal(0); // Signal updates still trigger full CD tree traversal
+
+  increment() {
+    this.count.update(c => c + 1);
+    // Even though only this signal changed, Angular might check
+    // this component during unrelated change detection cycles
+  }
+}
+
+// ✅ With OnPush - only checked when necessary
+@Component({
+  selector: 'app-counter',
+  changeDetection: ChangeDetectionStrategy.OnPush, // Much more efficient
+  template: `<p>Count: {{ count() }}</p>`
+})
+export class CounterComponent {
+  count = signal(0); // Signal updates trigger targeted checks
+
+  increment() {
+    this.count.update(c => c + 1);
+    // Component only checked when this signal changes or inputs change
+  }
+}
+```
+
+**Performance Comparison**
+
+```typescript
+// Large application scenario
+@Component({
+  selector: 'app-dashboard',
+  changeDetection: ChangeDetectionStrategy.OnPush, // Essential for performance
+  template: `
+    <div>
+      <!-- 100+ components with signals -->
+      @for (item of items(); track item.id) {
+        <app-expensive-component [data]="item" />
+      }
+
+      <!-- This signal change only affects this component -->
+      <p>Status: {{ status() }}</p>
+    </div>
+  `
+})
+export class DashboardComponent {
+  items = signal<Item[]>([]);
+  status = signal('loading');
+
+  updateStatus() {
+    this.status.set('ready');
+    // Without OnPush: Angular checks ALL 100+ components
+    // With OnPush: Angular only checks THIS component
+  }
+}
+```
+
+**Zoneless Mode Requirement**
+
+In Angular's zoneless mode (the future), OnPush becomes **mandatory** for proper signal integration:
+
+```typescript
+// Zoneless application bootstrap
+bootstrapApplication(AppComponent, {
+  providers: [
+    provideZonelessChangeDetection(), // Zoneless mode
+    // In zoneless mode, OnPush is required for components with signals
+  ]
+});
+
+@Component({
+  selector: 'app-zoneless-component',
+  changeDetection: ChangeDetectionStrategy.OnPush, // Required in zoneless mode
+  template: `
+    <div>
+      <p>Timer: {{ timer() }}</p>
+      <button (click)="start()">Start</button>
+    </div>
+  `
+})
+export class ZonelessComponent {
+  timer = signal(0);
+
+  start() {
+    setInterval(() => {
+      this.timer.update(t => t + 1);
+      // In zoneless mode, only OnPush components with signals work correctly
+    }, 1000);
+  }
+}
+```
+
+### The Bottom Line
+
+**OnPush is still essential**, but understanding when it helps is crucial:
+
+- ✅ **Prevents checks**: When parent doesn't check and component has no changes
+- ❌ **Cannot prevent checks**: When parent component is checking
+- 🎯 **Best practice**: Use OnPush + isolated component signals for optimal performance
+
+Check this example:
+https://github.com/eladcandroid/angular-zoneless-onpush/
+
+**Mixed Component Scenarios**
+
+Real applications often mix signals with observables. OnPush works perfectly with both:
+
+```typescript
+@Component({
+  selector: 'app-mixed-data',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <div>
+      <!-- Signal-based data (optimal) -->
+      <p>User count: {{ userCount() }}</p>
+      <p>Is loading: {{ isLoading() }}</p>
+
+      <!-- Observable-based data (still works with OnPush) -->
+      <p>Server data: {{ serverData$ | async }}</p>
+
+      <!-- Computed from both -->
+      <p>Display message: {{ displayMessage() }}</p>
+    </div>
+  `
+})
+export class MixedDataComponent {
+  // Signals
+  userCount = signal(0);
+  isLoading = signal(false);
+
+  // Observable
+  serverData$ = this.http.get('/api/data');
+
+  // Computed signal that can use both patterns
+  displayMessage = computed(() => {
+    if (this.isLoading()) return 'Loading...';
+    return `Found ${this.userCount()} users`;
+  });
+}
+```
+
+**Key Takeaways**
+
+1. **OnPush is required for zoneless mode** - Angular's future direction
+2. **Prevents unnecessary checks** even with signals in zone.js mode
+3. **No downsides** - signals work perfectly with OnPush
+4. **Best practice** for all modern Angular components
+5. **Performance critical** in large applications with many components
+
+**The Bottom Line**: Signals make change detection **smarter** (fine-grained reactivity), but OnPush makes it **more selective** (fewer unnecessary checks). Together, they provide optimal performance.
+
+#### OnPush Change Detection and Zoneless Compatibility
+
+Here's how OnPush and signals work together in practice:
+
+```typescript
+import { Component, ChangeDetectionStrategy, signal, computed } from '@angular/core';
+
+@Component({
+  selector: 'app-optimized',
+  changeDetection: ChangeDetectionStrategy.OnPush, // Required for optimal signal performance
+  template: `
+    <div>
+      <p>Count: {{ count() }}</p>
+      <p>Double: {{ doubleCount() }}</p>
+    </div>
+  `
+})
+export class OptimizedComponent {
+  count = signal(0);
+  doubleCount = computed(() => this.count() * 2);
+
+  increment() {
+    this.count.update(c => c + 1);
+    // Angular automatically marks component for check when signals change
+    // Works seamlessly in both zone.js and zoneless modes
+  }
+}
+```
+
+#### Avoiding Unnecessary Computations
+
+```typescript
+//  Good - computed signals are memoized
+const expensiveValue = computed(() => {
+  return expensiveCalculation(data());
+});
+
+// L Avoid - recalculates on every template evaluation
+getExpensiveValue() {
+  return expensiveCalculation(this.data());
+}
+```
+
+### Migration from RxJS
+
+Signals can work alongside RxJS observables:
+
+```typescript
+import { signal } from '@angular/core';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+
+// Convert signal to observable
+const count = signal(0);
+const count$ = toObservable(count);
+
+// Convert observable to signal
+const data$ = this.http.get('/api/data');
+const data = toSignal(data$, { initialValue: null });
+```
+
+### Best Practices Summary
+
+1. **Always use OnPush change detection** with signal-based components (see "Why OnPush with Signals?" section for detailed explanation)
+2. **Prefer computed over methods** for derived values
+3. **Use effects sparingly** - only for side effects
+4. **Keep signals focused** - one responsibility per signal
+5. **Use model inputs** for two-way binding components
+6. **Leverage TypeScript** for type safety
+7. **Avoid complex equality functions** unless necessary
+8. **Use untracked()** when reading signals without dependencies
+9. **Enable zoneless mode** for maximum performance with signals
+10. **Never use manual change detection** with signals - they handle reactivity automatically
+11. **Understand that signals optimize change detection, they don't eliminate it** - OnPush is still essential
+12. **Isolate component signals** - avoid sharing signals across parent/child when possible for maximum OnPush benefits
+13. **Remember OnPush limitations** - child components with OnPush still check when parent checks
+
+## Practical Examples
+
+### Todo List with Statistics
+
+```typescript
+import { Component, signal, computed, ChangeDetectionStrategy } from '@angular/core';
+
+interface Todo {
+  id: number;
+  text: string;
+  completed: boolean;
+}
+
+@Component({
+  selector: 'app-todo-list',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <div class="todo-app">
+      <h2>Todo List</h2>
+
+      <div class="stats">
+        <p>Total: {{ totalCount() }}</p>
+        <p>Completed: {{ completedCount() }}</p>
+        <p>Remaining: {{ remainingCount() }}</p>
+        <p>Progress: {{ progressPercentage() }}%</p>
+      </div>
+
+      <div class="add-todo">
+        <input
+          [(ngModel)]="newTodoText"
+          (keyup.enter)="addTodo()"
+          placeholder="Add new todo">
+        <button (click)="addTodo()">Add</button>
+      </div>
+
+      <div class="todo-list">
+        @for (todo of todos(); track todo.id) {
+          <div class="todo-item">
+            <input
+              type="checkbox"
+              [checked]="todo.completed"
+              (change)="toggleTodo(todo.id)">
+            <span [class.completed]="todo.completed">{{ todo.text }}</span>
+            <button (click)="removeTodo(todo.id)">Delete</button>
+          </div>
+        }
+      </div>
+
+      <div class="filters">
+        <button
+          [class.active]="filter() === 'all'"
+          (click)="setFilter('all')">All</button>
+        <button
+          [class.active]="filter() === 'active'"
+          (click)="setFilter('active')">Active</button>
+        <button
+          [class.active]="filter() === 'completed'"
+          (click)="setFilter('completed')">Completed</button>
+      </div>
+
+      <div class="filtered-todos">
+        @for (todo of filteredTodos(); track todo.id) {
+          <div class="todo-item">
+            <span [class.completed]="todo.completed">{{ todo.text }}</span>
+          </div>
+        }
+      </div>
+    </div>
+  `
+})
+export class TodoListComponent {
+  // State signals
+  todos = signal<Todo[]>([
+    { id: 1, text: 'Learn Angular Signals', completed: false },
+    { id: 2, text: 'Build a todo app', completed: true },
+    { id: 3, text: 'Write tests', completed: false }
+  ]);
+
+  newTodoText = signal('');
+  filter = signal<'all' | 'active' | 'completed'>('all');
+
+  // Computed statistics
+  totalCount = computed(() => this.todos().length);
+
+  completedCount = computed(() =>
+    this.todos().filter(todo => todo.completed).length
+  );
+
+  remainingCount = computed(() =>
+    this.todos().filter(todo => !todo.completed).length
+  );
+
+  progressPercentage = computed(() => {
+    const total = this.totalCount();
+    const completed = this.completedCount();
+    return total === 0 ? 0 : Math.round((completed / total) * 100);
+  });
+
+  // Filtered todos based on current filter
+  filteredTodos = computed(() => {
+    const currentFilter = this.filter();
+    const allTodos = this.todos();
+
+    switch (currentFilter) {
+      case 'active':
+        return allTodos.filter(todo => !todo.completed);
+      case 'completed':
+        return allTodos.filter(todo => todo.completed);
+      default:
+        return allTodos;
+    }
+  });
+
+  // Actions
+  addTodo() {
+    const text = this.newTodoText().trim();
+    if (text) {
+      this.todos.update(todos => [
+        ...todos,
+        {
+          id: Date.now(),
+          text,
+          completed: false
+        }
+      ]);
+      this.newTodoText.set('');
+    }
+  }
+
+  toggleTodo(id: number) {
+    this.todos.update(todos =>
+      todos.map(todo =>
+        todo.id === id
+          ? { ...todo, completed: !todo.completed }
+          : todo
+      )
+    );
+  }
+
+  removeTodo(id: number) {
+    this.todos.update(todos =>
+      todos.filter(todo => todo.id !== id)
+    );
+  }
+
+  setFilter(newFilter: 'all' | 'active' | 'completed') {
+    this.filter.set(newFilter);
+  }
+}
+```
+
+### User Profile Form with Validation
+
+```typescript
+import { Component, signal, computed, effect } from '@angular/core';
+
+interface User {
+  firstName: string;
+  lastName: string;
+  email: string;
+  age: number;
+}
+
+@Component({
+  selector: 'app-user-form',
+  template: `
+    <form class="user-form">
+      <h2>User Profile</h2>
+
+      <div class="form-group">
+        <label>First Name</label>
+        <input
+          [value]="firstName()"
+          (input)="updateFirstName($event)"
+          [class.error]="firstNameError()">
+        @if (firstNameError()) {
+          <span class="error-message">{{ firstNameError() }}</span>
+        }
+      </div>
+
+      <div class="form-group">
+        <label>Last Name</label>
+        <input
+          [value]="lastName()"
+          (input)="updateLastName($event)"
+          [class.error]="lastNameError()">
+        @if (lastNameError()) {
+          <span class="error-message">{{ lastNameError() }}</span>
+        }
+      </div>
+
+      <div class="form-group">
+        <label>Email</label>
+        <input
+          type="email"
+          [value]="email()"
+          (input)="updateEmail($event)"
+          [class.error]="emailError()">
+        @if (emailError()) {
+          <span class="error-message">{{ emailError() }}</span>
+        }
+      </div>
+
+      <div class="form-group">
+        <label>Age</label>
+        <input
+          type="number"
+          [value]="age()"
+          (input)="updateAge($event)"
+          [class.error]="ageError()">
+        @if (ageError()) {
+          <span class="error-message">{{ ageError() }}</span>
+        }
+      </div>
+
+      <div class="form-summary">
+        <p>Full Name: {{ fullName() }}</p>
+        <p>Form Valid: {{ isFormValid() ? 'Yes' : 'No' }}</p>
+        <p>Errors: {{ errorCount() }}</p>
+      </div>
+
+      <button
+        [disabled]="!isFormValid()"
+        (click)="saveUser()">
+        Save User
+      </button>
+    </form>
+  `
+})
+export class UserFormComponent {
+  // Form field signals
+  firstName = signal('');
+  lastName = signal('');
+  email = signal('');
+  age = signal(0);
+
+  // Validation computed signals
+  firstNameError = computed(() => {
+    const name = this.firstName().trim();
+    if (!name) return 'First name is required';
+    if (name.length < 2) return 'First name must be at least 2 characters';
+    return null;
+  });
+
+  lastNameError = computed(() => {
+    const name = this.lastName().trim();
+    if (!name) return 'Last name is required';
+    if (name.length < 2) return 'Last name must be at least 2 characters';
+    return null;
+  });
+
+  emailError = computed(() => {
+    const email = this.email().trim();
+    if (!email) return 'Email is required';
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return 'Invalid email format';
+
+    return null;
+  });
+
+  ageError = computed(() => {
+    const age = this.age();
+    if (age < 1) return 'Age must be at least 1';
+    if (age > 120) return 'Age must be less than 120';
+    return null;
+  });
+
+  // Computed derived values
+  fullName = computed(() =>
+    `${this.firstName().trim()} ${this.lastName().trim()}`.trim()
+  );
+
+  errorCount = computed(() => {
+    const errors = [
+      this.firstNameError(),
+      this.lastNameError(),
+      this.emailError(),
+      this.ageError()
+    ].filter(error => error !== null);
+
+    return errors.length;
+  });
+
+  isFormValid = computed(() => this.errorCount() === 0);
+
+  constructor() {
+    // Effect for auto-save to localStorage
+    effect(() => {
+      const user: User = {
+        firstName: this.firstName(),
+        lastName: this.lastName(),
+        email: this.email(),
+        age: this.age()
+      };
+
+      localStorage.setItem('userFormDraft', JSON.stringify(user));
+    });
+
+    // Load from localStorage on init
+    this.loadFromStorage();
+  }
+
+  updateFirstName(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.firstName.set(target.value);
+  }
+
+  updateLastName(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.lastName.set(target.value);
+  }
+
+  updateEmail(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.email.set(target.value);
+  }
+
+  updateAge(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.age.set(Number(target.value));
+  }
+
+  saveUser() {
+    if (this.isFormValid()) {
+      const user: User = {
+        firstName: this.firstName(),
+        lastName: this.lastName(),
+        email: this.email(),
+        age: this.age()
+      };
+
+      console.log('Saving user:', user);
+      // Here you would typically call a service to save the user
+
+      // Clear the form
+      this.clearForm();
+    }
+  }
+
+  clearForm() {
+    this.firstName.set('');
+    this.lastName.set('');
+    this.email.set('');
+    this.age.set(0);
+  }
+
+  loadFromStorage() {
+    const saved = localStorage.getItem('userFormDraft');
+    if (saved) {
+      try {
+        const user: User = JSON.parse(saved);
+        this.firstName.set(user.firstName || '');
+        this.lastName.set(user.lastName || '');
+        this.email.set(user.email || '');
+        this.age.set(user.age || 0);
+      } catch (error) {
+        console.error('Error loading from storage:', error);
+      }
+    }
+  }
+}
+```
+
+### Shopping Cart with Local Storage
+
+```typescript
+import { Component, signal, computed, effect } from '@angular/core';
+
+interface Product {
+  id: number;
+  name: string;
+  price: number;
+  image: string;
+}
+
+interface CartItem extends Product {
+  quantity: number;
+}
+
+@Component({
+  selector: 'app-shopping-cart',
+  template: `
+    <div class="shopping-app">
+      <header class="cart-header">
+        <h1>Shopping Cart</h1>
+        <div class="cart-summary">
+          <span>Items: {{ totalItems() }}</span>
+          <span>Total: ${{ totalPrice() }}</span>
+          <button (click)="toggleCart()">
+            {{ showCart() ? 'Hide' : 'Show' }} Cart
+          </button>
+        </div>
+      </header>
+
+      <div class="products-grid">
+        <h2>Available Products</h2>
+        @for (product of availableProducts(); track product.id) {
+          <div class="product-card">
+            <img [src]="product.image" [alt]="product.name">
+            <h3>{{ product.name }}</h3>
+            <p>${{ product.price }}</p>
+            <button (click)="addToCart(product)">Add to Cart</button>
+          </div>
+        }
+      </div>
+
+      @if (showCart()) {
+        <div class="cart-panel">
+          <h2>Shopping Cart</h2>
+
+          @if (cartItems().length === 0) {
+            <p>Your cart is empty</p>
+          } @else {
+            @for (item of cartItems(); track item.id) {
+              <div class="cart-item">
+                <img [src]="item.image" [alt]="item.name">
+                <div class="item-details">
+                  <h4>{{ item.name }}</h4>
+                  <p>${{ item.price }} each</p>
+                </div>
+                <div class="quantity-controls">
+                  <button (click)="decreaseQuantity(item.id)">-</button>
+                  <span>{{ item.quantity }}</span>
+                  <button (click)="increaseQuantity(item.id)">+</button>
+                </div>
+                <div class="item-total">
+                  ${{ getItemTotal(item) }}
+                </div>
+                <button (click)="removeFromCart(item.id)" class="remove">�</button>
+              </div>
+            }
+
+            <div class="cart-totals">
+              <p>Subtotal: ${{ subtotal() }}</p>
+              <p>Tax (8%): ${{ tax() }}</p>
+              <p>Shipping: ${{ shipping() }}</p>
+              <h3>Total: ${{ totalPrice() }}</h3>
+            </div>
+
+            <div class="cart-actions">
+              <button (click)="clearCart()" class="clear">Clear Cart</button>
+              <button
+                [disabled]="cartItems().length === 0"
+                (click)="checkout()"
+                class="checkout">
+                Checkout
+              </button>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  `
+})
+export class ShoppingCartComponent {
+  // Available products
+  availableProducts = signal<Product[]>([
+    { id: 1, name: 'Laptop', price: 999, image: '/assets/laptop.jpg' },
+    { id: 2, name: 'Mouse', price: 25, image: '/assets/mouse.jpg' },
+    { id: 3, name: 'Keyboard', price: 75, image: '/assets/keyboard.jpg' },
+    { id: 4, name: 'Monitor', price: 200, image: '/assets/monitor.jpg' }
+  ]);
+
+  // Cart state
+  cartItems = signal<CartItem[]>([]);
+  showCart = signal(false);
+
+  // Computed values
+  totalItems = computed(() =>
+    this.cartItems().reduce((total, item) => total + item.quantity, 0)
+  );
+
+  subtotal = computed(() =>
+    this.cartItems().reduce((total, item) => total + (item.price * item.quantity), 0)
+  );
+
+  tax = computed(() =>
+    Math.round(this.subtotal() * 0.08 * 100) / 100
+  );
+
+  shipping = computed(() => {
+    const subtotal = this.subtotal();
+    if (subtotal === 0) return 0;
+    if (subtotal > 100) return 0; // Free shipping over $100
+    return 10;
+  });
+
+  totalPrice = computed(() =>
+    Math.round((this.subtotal() + this.tax() + this.shipping()) * 100) / 100
+  );
+
+  constructor() {
+    // Auto-save cart to localStorage
+    effect(() => {
+      const items = this.cartItems();
+      localStorage.setItem('shopping-cart', JSON.stringify(items));
+    });
+
+    // Load cart from localStorage on init
+    this.loadCartFromStorage();
+  }
+
+  addToCart(product: Product) {
+    this.cartItems.update(items => {
+      const existingItem = items.find(item => item.id === product.id);
+
+      if (existingItem) {
+        return items.map(item =>
+          item.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      } else {
+        return [...items, { ...product, quantity: 1 }];
+      }
+    });
+  }
+
+  removeFromCart(productId: number) {
+    this.cartItems.update(items =>
+      items.filter(item => item.id !== productId)
+    );
+  }
+
+  increaseQuantity(productId: number) {
+    this.cartItems.update(items =>
+      items.map(item =>
+        item.id === productId
+          ? { ...item, quantity: item.quantity + 1 }
+          : item
+      )
+    );
+  }
+
+  decreaseQuantity(productId: number) {
+    this.cartItems.update(items =>
+      items.map(item =>
+        item.id === productId
+          ? { ...item, quantity: Math.max(1, item.quantity - 1) }
+          : item
+      )
+    );
+  }
+
+  getItemTotal(item: CartItem): number {
+    return Math.round(item.price * item.quantity * 100) / 100;
+  }
+
+  clearCart() {
+    this.cartItems.set([]);
+  }
+
+  toggleCart() {
+    this.showCart.update(show => !show);
+  }
+
+  checkout() {
+    const items = this.cartItems();
+    const total = this.totalPrice();
+
+    console.log('Processing checkout:', { items, total });
+
+    // Simulate checkout process
+    alert(`Checkout complete! Total: $${total}`);
+    this.clearCart();
+    this.showCart.set(false);
+  }
+
+  loadCartFromStorage() {
+    const saved = localStorage.getItem('shopping-cart');
+    if (saved) {
+      try {
+        const items: CartItem[] = JSON.parse(saved);
+        this.cartItems.set(items);
+      } catch (error) {
+        console.error('Error loading cart from storage:', error);
+      }
+    }
+  }
+}
+```
+
+These examples demonstrate real-world usage of Angular Signals, showing how they can simplify state management, improve performance, and create more maintainable reactive applications.
+
+---
+
+## Summary
+
+Angular Signals provide a stable, powerful reactive approach to state management that offers:
+
+- **Better Performance**: Fine-grained reactivity that only updates what actually changed
+- **Improved Developer Experience**: Type-safe, predictable state management
+- **Simplified Code**: Less boilerplate compared to traditional reactive patterns
+- **Automatic Optimization**: Built-in memoization and lazy evaluation
+- **Zoneless Compatibility**: Essential for Angular's zoneless change detection mode
+
+Key takeaways:
+1. Use `signal()` for basic reactive state
+2. Use `computed()` for derived values
+3. Use `effect()` sparingly for side effects
+4. Use `input()` and `model()` for component communication
+5. Always enable OnPush change detection with signals
+6. Keep signals focused and avoid complex computations in effects
+7. Signals are stable as of Angular 20 and ready for production use
+8. Perfect foundation for zoneless Angular applications
+
+Signals represent the present and future of reactive programming in Angular and provide a solid foundation for building modern, performant web applications with optimal change detection performance.
