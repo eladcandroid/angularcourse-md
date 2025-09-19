@@ -1122,6 +1122,1111 @@ Examples of good use cases:
 - Search boxes with filters
 - Any component that acts as a form control
 
+## Signal Queries
+
+Signal queries provide a modern, reactive way to access child components, directives, and DOM elements within Angular components. As of Angular 19, signal queries are production-ready and the recommended approach for querying component children.
+
+### View Queries
+
+View queries retrieve results from elements in the component's template. These are the elements defined directly in the component's own template.
+
+#### viewChild
+
+Query for a single child element or component:
+
+```typescript
+import { Component, viewChild, ElementRef } from '@angular/core';
+
+@Component({
+  selector: 'app-parent',
+  template: `
+    <div>
+      <button #saveBtn>Save</button>
+      <app-custom-card></app-custom-card>
+    </div>
+  `
+})
+export class ParentComponent {
+  // Query by template reference variable
+  saveButton = viewChild<ElementRef<HTMLButtonElement>>('saveBtn');
+
+  // Query by component type
+  customCard = viewChild(CustomCardComponent);
+
+  ngAfterViewInit() {
+    // Access the elements after view initialization
+    const buttonEl = this.saveButton();
+    const cardComponent = this.customCard();
+
+    if (buttonEl) {
+      console.log('Save button:', buttonEl.nativeElement);
+    }
+
+    if (cardComponent) {
+      console.log('Card component:', cardComponent);
+    }
+  }
+}
+```
+
+#### viewChild.required
+
+For elements that you know will always be present, use required queries:
+
+```typescript
+@Component({
+  selector: 'app-form',
+  template: `
+    <form #userForm>
+      <input #usernameInput type="text" required>
+      <button type="submit">Submit</button>
+    </form>
+  `
+})
+export class FormComponent {
+  // Required queries - guaranteed to have a value
+  form = viewChild.required<ElementRef<HTMLFormElement>>('userForm');
+  usernameInput = viewChild.required<ElementRef<HTMLInputElement>>('usernameInput');
+
+  submitForm() {
+    // No need to check for undefined - required queries guarantee a value
+    const formEl = this.form().nativeElement;
+    const inputEl = this.usernameInput().nativeElement;
+
+    if (formEl.checkValidity()) {
+      console.log('Username:', inputEl.value);
+    }
+  }
+}
+```
+
+#### viewChildren
+
+Query for multiple child elements:
+
+```typescript
+@Component({
+  selector: 'app-tab-container',
+  template: `
+    <div class="tabs">
+      <app-tab title="Tab 1">Content 1</app-tab>
+      <app-tab title="Tab 2">Content 2</app-tab>
+      <app-tab title="Tab 3">Content 3</app-tab>
+    </div>
+  `
+})
+export class TabContainerComponent {
+  // Query for all tab components
+  tabs = viewChildren(TabComponent);
+
+  // Computed to get tab titles
+  tabTitles = computed(() =>
+    this.tabs().map(tab => tab.title)
+  );
+
+  // Computed to count tabs
+  tabCount = computed(() => this.tabs().length);
+
+  activateTab(index: number) {
+    const tabs = this.tabs();
+    if (tabs[index]) {
+      tabs[index].activate();
+    }
+  }
+
+  ngAfterViewInit() {
+    // Access all tabs after view initialization
+    effect(() => {
+      console.log(`Found ${this.tabCount()} tabs:`, this.tabTitles());
+    });
+  }
+}
+```
+
+### Content Queries
+
+Content queries retrieve results from elements projected into the component through content projection (ng-content).
+
+#### contentChild
+
+Query for a single projected child:
+
+```typescript
+@Component({
+  selector: 'app-card',
+  template: `
+    <div class="card">
+      <div class="card-header">
+        <ng-content select="[slot=header]"></ng-content>
+      </div>
+      <div class="card-body">
+        <ng-content></ng-content>
+      </div>
+    </div>
+  `
+})
+export class CardComponent {
+  // Query for projected header component
+  header = contentChild(CardHeaderComponent);
+
+  // Query by template reference variable
+  headerElement = contentChild<ElementRef>('cardHeader');
+
+  // Computed to check if header exists
+  hasHeader = computed(() => !!this.header());
+
+  ngAfterContentInit() {
+    effect(() => {
+      const header = this.header();
+      if (header) {
+        console.log('Header component found:', header);
+      }
+    });
+  }
+}
+
+// Usage in parent template:
+// <app-card>
+//   <app-card-header slot="header">My Card Title</app-card-header>
+//   <p>Card content goes here</p>
+// </app-card>
+```
+
+#### contentChild.required
+
+For projected content that must be present:
+
+```typescript
+@Component({
+  selector: 'app-dialog',
+  template: `
+    <div class="dialog-overlay">
+      <div class="dialog">
+        <div class="dialog-title">
+          <ng-content select="[slot=title]"></ng-content>
+        </div>
+        <div class="dialog-content">
+          <ng-content></ng-content>
+        </div>
+        <div class="dialog-actions">
+          <ng-content select="[slot=actions]"></ng-content>
+        </div>
+      </div>
+    </div>
+  `
+})
+export class DialogComponent {
+  // Required projected content
+  titleComponent = contentChild.required(DialogTitleComponent);
+
+  closeDialog() {
+    // Can safely access without null checking
+    const title = this.titleComponent();
+    console.log(`Closing dialog: ${title.text}`);
+  }
+}
+```
+
+#### contentChildren
+
+Query for multiple projected children:
+
+```typescript
+@Component({
+  selector: 'app-menu',
+  template: `
+    <nav class="menu">
+      <ng-content></ng-content>
+    </nav>
+  `
+})
+export class MenuComponent {
+  // Query for all projected menu items
+  menuItems = contentChildren(MenuItemComponent);
+
+  // Computed values based on content
+  itemCount = computed(() => this.menuItems().length);
+  hasItems = computed(() => this.itemCount() > 0);
+
+  enabledItems = computed(() =>
+    this.menuItems().filter(item => !item.disabled)
+  );
+
+  ngAfterContentInit() {
+    // React to content changes
+    effect(() => {
+      console.log(`Menu has ${this.itemCount()} items`);
+
+      // Set up keyboard navigation
+      this.menuItems().forEach((item, index) => {
+        item.tabIndex = index;
+      });
+    });
+  }
+
+  selectNext() {
+    const items = this.enabledItems();
+    // Implementation for keyboard navigation...
+  }
+}
+
+// Usage:
+// <app-menu>
+//   <app-menu-item>Home</app-menu-item>
+//   <app-menu-item>About</app-menu-item>
+//   <app-menu-item [disabled]="true">Admin</app-menu-item>
+// </app-menu>
+```
+
+### Query Options
+
+Signal queries support various options to customize their behavior:
+
+#### Reading Specific Values
+
+Use the `read` option to extract specific values from queried elements:
+
+```typescript
+@Component({
+  selector: 'app-template-example',
+  template: `
+    <ng-template #myTemplate>
+      <p>Template content</p>
+    </ng-template>
+
+    <div #myDiv class="content">
+      <span>Some content</span>
+    </div>
+  `
+})
+export class TemplateExampleComponent {
+  // Read TemplateRef from template reference
+  template = viewChild('myTemplate', { read: TemplateRef });
+
+  // Read ElementRef from component (default behavior)
+  divElement = viewChild<ElementRef<HTMLDivElement>>('myDiv');
+
+  // Read ViewContainerRef from element
+  viewContainer = viewChild('myDiv', { read: ViewContainerRef });
+
+  ngAfterViewInit() {
+    const template = this.template();
+    const element = this.divElement();
+    const container = this.viewContainer();
+
+    if (template && container) {
+      // Use template and container...
+      container.createEmbeddedView(template);
+    }
+  }
+}
+```
+
+#### Content Descendants
+
+Content queries can control whether to traverse into descendant elements:
+
+```typescript
+@Component({
+  selector: 'app-accordion',
+  template: `
+    <div class="accordion">
+      <ng-content></ng-content>
+    </div>
+  `
+})
+export class AccordionComponent {
+  // Find only direct children (default behavior for contentChildren)
+  directPanels = contentChildren(AccordionPanelComponent);
+
+  // Find all descendants including nested panels
+  allPanels = contentChildren(AccordionPanelComponent, { descendants: true });
+
+  ngAfterContentInit() {
+    effect(() => {
+      console.log(`Direct panels: ${this.directPanels().length}`);
+      console.log(`All panels: ${this.allPanels().length}`);
+    });
+  }
+}
+
+// Usage with nested structure:
+// <app-accordion>
+//   <app-accordion-panel>Panel 1</app-accordion-panel>
+//   <div class="group">
+//     <app-accordion-panel>Nested Panel</app-accordion-panel>
+//   </div>
+// </app-accordion>
+```
+
+### Advanced Query Patterns
+
+#### Conditional Queries
+
+Queries automatically handle conditional rendering:
+
+```typescript
+@Component({
+  selector: 'app-conditional-content',
+  template: `
+    <div>
+      @if (showAdvanced()) {
+        <app-advanced-settings #advanced></app-advanced-settings>
+      }
+
+      @if (showBasic()) {
+        <app-basic-settings #basic></app-basic-settings>
+      }
+    </div>
+  `
+})
+export class ConditionalContentComponent {
+  showAdvanced = signal(false);
+  showBasic = signal(true);
+
+  // These queries automatically handle presence/absence
+  advancedSettings = viewChild<AdvancedSettingsComponent>('advanced');
+  basicSettings = viewChild<BasicSettingsComponent>('basic');
+
+  // Computed to determine which settings are active
+  activeSettings = computed(() => {
+    const advanced = this.advancedSettings();
+    const basic = this.basicSettings();
+
+    if (advanced) return 'advanced';
+    if (basic) return 'basic';
+    return 'none';
+  });
+
+  constructor() {
+    // React to settings changes
+    effect(() => {
+      const settings = this.activeSettings();
+      console.log(`Active settings: ${settings}`);
+    });
+  }
+
+  toggleAdvanced() {
+    this.showAdvanced.update(show => !show);
+    if (this.showAdvanced()) {
+      this.showBasic.set(false);
+    }
+  }
+}
+```
+
+#### Query with Dynamic Components
+
+```typescript
+@Component({
+  selector: 'app-dynamic-host',
+  template: `
+    <div #dynamicHost></div>
+    <button (click)="loadComponent()">Load Component</button>
+  `
+})
+export class DynamicHostComponent {
+  dynamicHost = viewChild.required<ElementRef>('dynamicHost');
+
+  // Keep reference to dynamically created component
+  private dynamicComponentRef = signal<ComponentRef<any> | null>(null);
+
+  constructor(private viewContainer: ViewContainerRef) {}
+
+  async loadComponent() {
+    // Dynamic component loading
+    const { DynamicComponent } = await import('./dynamic.component');
+
+    this.viewContainer.clear();
+    const componentRef = this.viewContainer.createComponent(DynamicComponent);
+
+    this.dynamicComponentRef.set(componentRef);
+
+    // You can now interact with the dynamically loaded component
+    componentRef.instance.someProperty = 'Hello from host';
+  }
+
+  ngOnDestroy() {
+    // Clean up dynamic component
+    const componentRef = this.dynamicComponentRef();
+    if (componentRef) {
+      componentRef.destroy();
+    }
+  }
+}
+```
+
+### Signal Queries vs Decorator Queries
+
+Signal queries offer several advantages over the traditional decorator-based queries:
+
+```typescript
+// ❌ Old decorator approach
+@Component({
+  template: '<app-child #child></app-child>'
+})
+export class OldStyleComponent {
+  @ViewChild('child') child!: ChildComponent;
+
+  ngAfterViewInit() {
+    // Must wait for lifecycle hook
+    console.log(this.child.data);
+  }
+}
+
+// ✅ New signal approach
+@Component({
+  template: '<app-child #child></app-child>'
+})
+export class ModernComponent {
+  child = viewChild.required<ChildComponent>('child');
+
+  // Can use in computed and effects
+  childData = computed(() => this.child().data);
+
+  constructor() {
+    // Automatically runs when child is available
+    effect(() => {
+      console.log('Child data:', this.childData());
+    });
+  }
+}
+```
+
+### Best Practices for Signal Queries
+
+1. **Use required queries** when elements are guaranteed to exist
+2. **Prefer signal queries** over decorator queries for new code
+3. **Use computed signals** to derive values from query results
+4. **Handle undefined values** gracefully for optional queries
+5. **Combine with effects** for reactive behaviors
+6. **Use specific types** for better type safety
+7. **Query at the right level** - view queries for template elements, content queries for projected content
+
+### Migration from Decorator Queries
+
+Angular provides an automatic migration tool:
+
+```bash
+# Run the signal queries migration
+ng generate @angular/core:signal-queries-migration
+
+# With options
+ng generate @angular/core:signal-queries-migration --best-effort-mode --insert-todos
+```
+
+The migration will convert:
+- `@ViewChild()` → `viewChild()`
+- `@ViewChildren()` → `viewChildren()`
+- `@ContentChild()` → `contentChild()`
+- `@ContentChildren()` → `contentChildren()`
+
+And update all references to call the signal functions.
+
+## Resource API
+
+The Resource API provides a powerful, signal-based approach to managing asynchronous data fetching in Angular applications. It integrates seamlessly with signals to provide reactive data loading with built-in loading states, error handling, and streaming capabilities.
+
+### Basic Resource Usage
+
+```typescript
+import { Component, signal, resource } from '@angular/core';
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+@Component({
+  selector: 'app-user-profile',
+  template: `
+    <div>
+      @if (userResource.isLoading()) {
+        <div class="loading">Loading user...</div>
+      } @else if (userResource.hasValue()) {
+        <div class="user-profile">
+          <h2>{{ userResource.value().name }}</h2>
+          <p>{{ userResource.value().email }}</p>
+        </div>
+      } @else if (userResource.error()) {
+        <div class="error">
+          <p>Failed to load user: {{ userResource.error()?.message }}</p>
+          <button (click)="userResource.reload()">Retry</button>
+        </div>
+      }
+    </div>
+  `
+})
+export class UserProfileComponent {
+  userId = signal(1);
+
+  // Resource that fetches user data
+  userResource = resource<User, number>({
+    // The request is triggered when this signal changes
+    params: () => this.userId(),
+
+    // The async function that fetches data
+    loader: async ({ params: userId }) => {
+      const response = await fetch(`/api/users/${userId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch user: ${response.statusText}`);
+      }
+      return response.json() as User;
+    }
+  });
+
+  switchUser(newUserId: number) {
+    this.userId.set(newUserId);
+    // Resource automatically refetches when userId changes
+  }
+}
+```
+
+### Resource with Default Values
+
+```typescript
+@Component({
+  selector: 'app-product-list',
+  template: `
+    <div>
+      <h2>Products</h2>
+      @for (product of productsResource.value(); track product.id) {
+        <div class="product">
+          <h3>{{ product.name }}</h3>
+          <p>{{ product.price | currency }}</p>
+        </div>
+      }
+
+      @if (productsResource.isLoading()) {
+        <div class="loading-overlay">Updating products...</div>
+      }
+    </div>
+  `
+})
+export class ProductListComponent {
+  category = signal('electronics');
+
+  productsResource = resource({
+    // Default value to show while loading initial data
+    defaultValue: [] as Product[],
+
+    params: () => this.category(),
+
+    loader: async ({ params: category }) => {
+      const response = await fetch(`/api/products?category=${category}`);
+      return response.json() as Product[];
+    }
+  });
+
+  changeCategory(newCategory: string) {
+    this.category.set(newCategory);
+  }
+}
+```
+
+### Resource with Multiple Parameters
+
+```typescript
+@Component({
+  selector: 'app-search-results',
+  template: `
+    <div>
+      <input
+        [value]="searchQuery()"
+        (input)="updateSearchQuery($event)">
+
+      <select [value]="sortBy()" (change)="updateSortBy($event)">
+        <option value="name">Name</option>
+        <option value="price">Price</option>
+        <option value="rating">Rating</option>
+      </select>
+
+      @if (searchResource.isLoading()) {
+        <div>Searching...</div>
+      } @else {
+        <div class="results">
+          <p>Found {{ searchResource.value().length }} results</p>
+          @for (item of searchResource.value(); track item.id) {
+            <div class="result-item">{{ item.name }}</div>
+          }
+        </div>
+      }
+    </div>
+  `
+})
+export class SearchResultsComponent {
+  searchQuery = signal('');
+  sortBy = signal('name');
+
+  // Resource that depends on multiple signals
+  searchResource = resource({
+    defaultValue: [] as SearchResult[],
+
+    // Combine multiple signals into params
+    params: () => ({
+      query: this.searchQuery(),
+      sort: this.sortBy()
+    }),
+
+    loader: async ({ params }) => {
+      if (!params.query.trim()) {
+        return []; // Return empty results for empty query
+      }
+
+      const url = new URL('/api/search', window.location.origin);
+      url.searchParams.set('q', params.query);
+      url.searchParams.set('sort', params.sort);
+
+      const response = await fetch(url);
+      return response.json() as SearchResult[];
+    }
+  });
+
+  updateSearchQuery(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.searchQuery.set(target.value);
+  }
+
+  updateSortBy(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    this.sortBy.set(target.value);
+  }
+}
+```
+
+### Resource Status and State Management
+
+```typescript
+@Component({
+  selector: 'app-data-manager',
+  template: `
+    <div>
+      <div class="status-bar">
+        <span class="status">Status: {{ getStatusText() }}</span>
+        <button
+          (click)="dataResource.reload()"
+          [disabled]="dataResource.isLoading()">
+          Refresh
+        </button>
+      </div>
+
+      @switch (true) {
+        @case (dataResource.isLoading()) {
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading data...</p>
+          </div>
+        }
+        @case (dataResource.hasValue()) {
+          <div class="data-display">
+            <h3>Data loaded successfully</h3>
+            <pre>{{ dataResource.value() | json }}</pre>
+            <p>Last updated: {{ lastUpdateTime() | date:'medium' }}</p>
+          </div>
+        }
+        @case (dataResource.error()) {
+          <div class="error-state">
+            <h3>Error occurred</h3>
+            <p>{{ dataResource.error()?.message }}</p>
+            <button (click)="dataResource.reload()">Try Again</button>
+          </div>
+        }
+      }
+    </div>
+  `
+})
+export class DataManagerComponent {
+  refreshTrigger = signal(0);
+  lastUpdateTime = signal<Date | null>(null);
+
+  dataResource = resource({
+    params: () => this.refreshTrigger(),
+
+    loader: async () => {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Randomly fail sometimes to demonstrate error handling
+      if (Math.random() < 0.3) {
+        throw new Error('Random API failure');
+      }
+
+      this.lastUpdateTime.set(new Date());
+      return {
+        timestamp: Date.now(),
+        data: `Sample data ${this.refreshTrigger()}`
+      };
+    }
+  });
+
+  getStatusText(): string {
+    if (this.dataResource.isLoading()) return 'Loading';
+    if (this.dataResource.hasValue()) return 'Success';
+    if (this.dataResource.error()) return 'Error';
+    return 'Unknown';
+  }
+
+  forceRefresh() {
+    this.refreshTrigger.update(count => count + 1);
+  }
+}
+```
+
+### HTTP Resource Integration
+
+```typescript
+import { Injectable, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class ApiService {
+  private http = inject(HttpClient);
+
+  // Helper method for creating HTTP-based resources
+  createHttpResource<T>(url: string, options?: RequestInit) {
+    return resource<T, void>({
+      loader: async () => {
+        return this.http.get<T>(url).toPromise();
+      }
+    });
+  }
+
+  // Resource factory with parameters
+  createParameterizedResource<T, P>(urlFactory: (params: P) => string) {
+    return (params: () => P) => resource<T, P>({
+      params,
+      loader: async ({ params }) => {
+        const url = urlFactory(params);
+        return this.http.get<T>(url).toPromise();
+      }
+    });
+  }
+}
+
+@Component({
+  selector: 'app-http-example',
+  template: `
+    <div>
+      @if (userResource.hasValue()) {
+        <h2>{{ userResource.value().name }}</h2>
+      }
+
+      @if (postsResource.hasValue()) {
+        <div class="posts">
+          @for (post of postsResource.value(); track post.id) {
+            <div class="post">{{ post.title }}</div>
+          }
+        </div>
+      }
+    </div>
+  `
+})
+export class HttpExampleComponent {
+  private api = inject(ApiService);
+
+  userId = signal(1);
+
+  // Simple HTTP resource
+  userResource = resource({
+    params: () => this.userId(),
+    loader: async ({ params: userId }) => {
+      return inject(HttpClient).get<User>(`/api/users/${userId}`).toPromise();
+    }
+  });
+
+  // Using service helper
+  postsResource = this.api.createParameterizedResource<Post[], number>(
+    (userId) => `/api/users/${userId}/posts`
+  )(this.userId);
+}
+```
+
+### Streaming Resources
+
+```typescript
+@Component({
+  selector: 'app-streaming-example',
+  template: `
+    <div>
+      <h2>Real-time Data Stream</h2>
+
+      @if (streamResource.isLoading()) {
+        <div>Connecting to stream...</div>
+      } @else if (streamResource.hasValue()) {
+        <div class="stream-data">
+          <p>Current value: {{ streamResource.value() }}</p>
+          <p>Updates: {{ updateCount() }}</p>
+        </div>
+      } @else if (streamResource.error()) {
+        <div class="error">
+          Stream error: {{ streamResource.error()?.message }}
+          <button (click)="streamResource.reload()">Reconnect</button>
+        </div>
+      }
+    </div>
+  `
+})
+export class StreamingExampleComponent {
+  updateCount = signal(0);
+
+  streamResource = resource({
+    stream: async () => {
+      const data = signal<ResourceStreamItem<string>>({ value: 'Initial value' });
+
+      // Simulate streaming data
+      const interval = setInterval(() => {
+        const newValue = `Stream update ${Date.now()}`;
+        data.set({ value: newValue });
+        this.updateCount.update(count => count + 1);
+      }, 2000);
+
+      // Cleanup function
+      setTimeout(() => {
+        clearInterval(interval);
+      }, 30000);
+
+      return data;
+    }
+  });
+}
+```
+
+### Advanced Resource Patterns
+
+#### Dependent Resources
+
+```typescript
+@Component({
+  selector: 'app-dependent-resources',
+  template: `
+    <div>
+      <select [value]="selectedCompanyId()" (change)="onCompanyChange($event)">
+        @for (company of companiesResource.value(); track company.id) {
+          <option [value]="company.id">{{ company.name }}</option>
+        }
+      </select>
+
+      @if (employeesResource.hasValue()) {
+        <div class="employees">
+          @for (employee of employeesResource.value(); track employee.id) {
+            <div class="employee">{{ employee.name }}</div>
+          }
+        </div>
+      }
+    </div>
+  `
+})
+export class DependentResourcesComponent {
+  selectedCompanyId = signal<number | null>(null);
+
+  // First resource - companies list
+  companiesResource = resource({
+    defaultValue: [] as Company[],
+    loader: async () => {
+      const response = await fetch('/api/companies');
+      return response.json() as Company[];
+    }
+  });
+
+  // Second resource - depends on first resource's result
+  employeesResource = resource({
+    defaultValue: [] as Employee[],
+    params: () => this.selectedCompanyId(),
+    loader: async ({ params: companyId }) => {
+      if (!companyId) return [];
+
+      const response = await fetch(`/api/companies/${companyId}/employees`);
+      return response.json() as Employee[];
+    }
+  });
+
+  onCompanyChange(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    this.selectedCompanyId.set(Number(target.value));
+  }
+}
+```
+
+#### Resource with Optimistic Updates
+
+```typescript
+@Component({
+  selector: 'app-optimistic-updates',
+  template: `
+    <div>
+      <form (submit)="addTodo($event)">
+        <input #todoInput placeholder="New todo...">
+        <button type="submit" [disabled]="isSubmitting()">Add</button>
+      </form>
+
+      <div class="todos">
+        @for (todo of allTodos(); track todo.id) {
+          <div class="todo" [class.pending]="todo.pending">
+            {{ todo.text }}
+            @if (todo.pending) {
+              <span class="status">Saving...</span>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  `
+})
+export class OptimisticUpdatesComponent {
+  isSubmitting = signal(false);
+  pendingTodos = signal<Todo[]>([]);
+
+  todosResource = resource({
+    defaultValue: [] as Todo[],
+    loader: async () => {
+      const response = await fetch('/api/todos');
+      return response.json() as Todo[];
+    }
+  });
+
+  // Combine server todos with pending optimistic updates
+  allTodos = computed(() => [
+    ...this.todosResource.value(),
+    ...this.pendingTodos()
+  ]);
+
+  async addTodo(event: Event) {
+    event.preventDefault();
+    const form = event.target as HTMLFormElement;
+    const input = form.querySelector('input') as HTMLInputElement;
+    const text = input.value.trim();
+
+    if (!text) return;
+
+    const optimisticTodo: Todo = {
+      id: Date.now(), // Temporary ID
+      text,
+      completed: false,
+      pending: true
+    };
+
+    // Add optimistically
+    this.pendingTodos.update(todos => [...todos, optimisticTodo]);
+    input.value = '';
+    this.isSubmitting.set(true);
+
+    try {
+      // Submit to server
+      const response = await fetch('/api/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+
+      if (!response.ok) throw new Error('Failed to create todo');
+
+      // Remove from pending and refresh from server
+      this.pendingTodos.update(todos =>
+        todos.filter(t => t.id !== optimisticTodo.id)
+      );
+      this.todosResource.reload();
+
+    } catch (error) {
+      // Revert optimistic update on error
+      this.pendingTodos.update(todos =>
+        todos.filter(t => t.id !== optimisticTodo.id)
+      );
+      console.error('Failed to add todo:', error);
+    } finally {
+      this.isSubmitting.set(false);
+    }
+  }
+}
+```
+
+### Best Practices for Resource API
+
+1. **Use default values** for immediate rendering while data loads
+2. **Handle all states** - loading, success, and error cases in templates
+3. **Combine resources with computed signals** for derived data
+4. **Use streaming** for real-time data that updates frequently
+5. **Implement optimistic updates** for better user experience
+6. **Cache resources at appropriate levels** - component vs service
+7. **Handle cleanup** properly for streaming resources
+8. **Use typed interfaces** for better type safety with resource data
+
+### Resource API vs Traditional Approaches
+
+```typescript
+// ❌ Traditional Observable approach
+@Component({
+  template: `
+    <div>
+      @if (loading) {
+        <div>Loading...</div>
+      } @else if (error) {
+        <div>Error: {{ error }}</div>
+      } @else {
+        <div>{{ user?.name }}</div>
+      }
+    </div>
+  `
+})
+export class TraditionalComponent implements OnInit, OnDestroy {
+  user: User | null = null;
+  loading = false;
+  error: string | null = null;
+  private destroy$ = new Subject<void>();
+
+  ngOnInit() {
+    this.loading = true;
+    this.userService.getUser(1)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: user => {
+          this.user = user;
+          this.loading = false;
+        },
+        error: err => {
+          this.error = err.message;
+          this.loading = false;
+        }
+      });
+  }
+
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+}
+
+// ✅ Resource API approach
+@Component({
+  template: `
+    <div>
+      @if (userResource.isLoading()) {
+        <div>Loading...</div>
+      } @else if (userResource.error()) {
+        <div>Error: {{ userResource.error()?.message }}</div>
+      } @else {
+        <div>{{ userResource.value()?.name }}</div>
+      }
+    </div>
+  `
+})
+export class ModernComponent {
+  userResource = resource({
+    loader: () => this.userService.getUser(1).toPromise()
+  });
+
+  constructor(private userService: UserService) {}
+
+  // No lifecycle management needed!
+  // No manual state management needed!
+  // Automatically handles cleanup!
+}
+```
+
+The Resource API significantly simplifies asynchronous data management while providing better integration with Angular's reactive system through signals.
+
 ## Advanced Topics
 
 ### Signal Equality Functions
@@ -1147,6 +2252,385 @@ const items = signal(
   { equal: (a, b) => a.length === b.length && a.every((v, i) => v === b[i]) }
 );
 ```
+
+### linkedSignal
+
+`linkedSignal` is an advanced signal API that creates a writable signal whose value is automatically reset based on a reactive computation. It's particularly useful for derived state that needs to be writable but should reset when its dependencies change.
+
+#### Basic linkedSignal
+
+```typescript
+import { Component, signal, linkedSignal, computed } from '@angular/core';
+
+@Component({
+  selector: 'app-search-with-history',
+  template: `
+    <div>
+      <input
+        [value]="searchQuery()"
+        (input)="updateSearchQuery($event)"
+        placeholder="Search...">
+
+      <div class="search-history">
+        <h3>Search History</h3>
+        @for (term of searchHistory(); track $index) {
+          <button (click)="selectFromHistory(term)">{{ term }}</button>
+        }
+        <button (click)="clearHistory()">Clear History</button>
+      </div>
+
+      <div class="results">
+        <p>Searching for: "{{ searchQuery() }}"</p>
+        <p>History count: {{ searchHistory().length }}</p>
+      </div>
+    </div>
+  `
+})
+export class SearchWithHistoryComponent {
+  searchQuery = signal('');
+
+  // linkedSignal that maintains search history
+  searchHistory = linkedSignal<string[]>({
+    source: () => this.searchQuery(),
+    computation: (currentQuery, previous) => {
+      const previousHistory = previous?.value || [];
+
+      // Don't add empty queries or duplicates
+      if (!currentQuery.trim() || previousHistory.includes(currentQuery)) {
+        return previousHistory;
+      }
+
+      // Add new query to history (keep last 10)
+      return [...previousHistory, currentQuery].slice(-10);
+    }
+  });
+
+  updateSearchQuery(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.searchQuery.set(target.value);
+  }
+
+  selectFromHistory(term: string) {
+    this.searchQuery.set(term);
+  }
+
+  clearHistory() {
+    // Can manually override linkedSignal value
+    this.searchHistory.set([]);
+  }
+}
+```
+
+#### linkedSignal with Previous Values
+
+```typescript
+@Component({
+  selector: 'app-counter-with-delta',
+  template: `
+    <div>
+      <p>Current Count: {{ count() }}</p>
+      <p>Previous Count: {{ previousCount() }}</p>
+      <p>Delta: {{ delta() }}</p>
+      <p>Change History: {{ changeHistory().join(', ') }}</p>
+
+      <button (click)="increment()">+1</button>
+      <button (click)="decrement()">-1</button>
+      <button (click)="reset()">Reset</button>
+    </div>
+  `
+})
+export class CounterWithDeltaComponent {
+  count = signal(0);
+
+  // Track previous count value
+  previousCount = linkedSignal({
+    source: () => this.count(),
+    computation: (currentCount, previous) => {
+      // Return the previous source value, or 0 if this is the first time
+      return previous?.source ?? 0;
+    }
+  });
+
+  // Calculate delta between current and previous
+  delta = computed(() => this.count() - this.previousCount());
+
+  // Track history of changes
+  changeHistory = linkedSignal<number[]>({
+    source: () => this.delta(),
+    computation: (currentDelta, previous) => {
+      const previousHistory = previous?.value || [];
+
+      // Don't record zero deltas (initial state)
+      if (currentDelta === 0) {
+        return previousHistory;
+      }
+
+      // Keep last 5 changes
+      return [...previousHistory, currentDelta].slice(-5);
+    }
+  });
+
+  increment() {
+    this.count.update(c => c + 1);
+  }
+
+  decrement() {
+    this.count.update(c => c - 1);
+  }
+
+  reset() {
+    this.count.set(0);
+  }
+}
+```
+
+#### Chat History with linkedSignal
+
+```typescript
+interface Message {
+  id: string;
+  text: string;
+  timestamp: Date;
+  sender: 'user' | 'ai';
+}
+
+@Component({
+  selector: 'app-chat-interface',
+  template: `
+    <div class="chat-container">
+      <div class="messages">
+        @for (message of chatHistory(); track message.id) {
+          <div class="message" [class]="message.sender">
+            <span class="sender">{{ message.sender }}:</span>
+            <span class="text">{{ message.text }}</span>
+            <span class="time">{{ message.timestamp | date:'short' }}</span>
+          </div>
+        }
+      </div>
+
+      <div class="input-area">
+        <input
+          [value]="currentMessage()"
+          (input)="updateCurrentMessage($event)"
+          (keyup.enter)="sendMessage()"
+          placeholder="Type a message...">
+        <button (click)="sendMessage()" [disabled]="!currentMessage().trim()">
+          Send
+        </button>
+      </div>
+
+      <div class="chat-stats">
+        <p>Total messages: {{ chatHistory().length }}</p>
+        <p>User messages: {{ userMessageCount() }}</p>
+        <p>AI responses: {{ aiMessageCount() }}</p>
+      </div>
+    </div>
+  `
+})
+export class ChatInterfaceComponent {
+  currentMessage = signal('');
+  newMessage = signal<Message | null>(null);
+
+  // Build chat history using linkedSignal
+  chatHistory = linkedSignal<Message[]>({
+    source: () => this.newMessage(),
+    computation: (latestMessage, previous) => {
+      const existingHistory = previous?.value || [];
+
+      if (!latestMessage) {
+        return existingHistory;
+      }
+
+      return [...existingHistory, latestMessage];
+    }
+  });
+
+  // Computed stats
+  userMessageCount = computed(() =>
+    this.chatHistory().filter(msg => msg.sender === 'user').length
+  );
+
+  aiMessageCount = computed(() =>
+    this.chatHistory().filter(msg => msg.sender === 'ai').length
+  );
+
+  updateCurrentMessage(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.currentMessage.set(target.value);
+  }
+
+  sendMessage() {
+    const text = this.currentMessage().trim();
+    if (!text) return;
+
+    // Add user message
+    const userMessage: Message = {
+      id: `user-${Date.now()}`,
+      text,
+      timestamp: new Date(),
+      sender: 'user'
+    };
+
+    this.newMessage.set(userMessage);
+    this.currentMessage.set('');
+
+    // Simulate AI response
+    setTimeout(() => {
+      const aiMessage: Message = {
+        id: `ai-${Date.now()}`,
+        text: `AI response to: "${text}"`,
+        timestamp: new Date(),
+        sender: 'ai'
+      };
+
+      this.newMessage.set(aiMessage);
+    }, 1000);
+  }
+}
+```
+
+#### Infinite Scroll with linkedSignal
+
+```typescript
+@Component({
+  selector: 'app-infinite-scroll',
+  template: `
+    <div class="scroll-container" (scroll)="onScroll($event)">
+      @for (item of allItems(); track item.id) {
+        <div class="item">{{ item.name }}</div>
+      }
+
+      @if (isLoading()) {
+        <div class="loading">Loading more...</div>
+      }
+    </div>
+
+    <div class="stats">
+      <p>Items loaded: {{ allItems().length }}</p>
+      <p>Page: {{ currentPage() }}</p>
+    </div>
+  `
+})
+export class InfiniteScrollComponent {
+  currentPage = signal(1);
+  isLoading = signal(false);
+  newPageData = signal<Item[] | null>(null);
+
+  // Accumulate items from multiple pages
+  allItems = linkedSignal<Item[]>({
+    source: () => this.newPageData(),
+    computation: (newData, previous) => {
+      const existingItems = previous?.value || [];
+
+      if (!newData) {
+        return existingItems;
+      }
+
+      // Append new items to existing list
+      return [...existingItems, ...newData];
+    }
+  });
+
+  constructor() {
+    // Load initial data
+    this.loadPage(1);
+
+    // Auto-load next page when page number changes
+    effect(() => {
+      const page = this.currentPage();
+      if (page > 1) {
+        this.loadPage(page);
+      }
+    });
+  }
+
+  async loadPage(page: number) {
+    this.isLoading.set(true);
+
+    try {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const newItems: Item[] = Array.from({ length: 20 }, (_, i) => ({
+        id: `page-${page}-item-${i}`,
+        name: `Item ${(page - 1) * 20 + i + 1}`
+      }));
+
+      this.newPageData.set(newItems);
+    } catch (error) {
+      console.error('Failed to load page:', error);
+    } finally {
+      this.isLoading.set(false);
+    }
+  }
+
+  onScroll(event: Event) {
+    const element = event.target as HTMLElement;
+    const threshold = 100; // pixels from bottom
+
+    if (element.scrollTop + element.clientHeight >= element.scrollHeight - threshold) {
+      if (!this.isLoading()) {
+        this.currentPage.update(page => page + 1);
+      }
+    }
+  }
+}
+```
+
+#### linkedSignal vs computed
+
+Understanding when to use `linkedSignal` vs `computed`:
+
+```typescript
+@Component({
+  selector: 'app-comparison-example'
+})
+export class ComparisonExampleComponent {
+  items = signal<string[]>(['apple', 'banana']);
+
+  // ✅ Use computed for pure derived state (read-only)
+  itemCount = computed(() => this.items().length);
+  uppercaseItems = computed(() => this.items().map(item => item.toUpperCase()));
+
+  // ✅ Use linkedSignal for derived state that can be manually overridden
+  selectedItems = linkedSignal<string[]>({
+    source: () => this.items(),
+    computation: (currentItems, previous) => {
+      const previousSelection = previous?.value || [];
+      // Keep only items that still exist
+      return previousSelection.filter(item => currentItems.includes(item));
+    }
+  });
+
+  // ❌ Don't use linkedSignal for simple transformations
+  // badExample = linkedSignal({
+  //   source: () => this.items(),
+  //   computation: (items) => items.length // Just use computed instead
+  // });
+
+  addItem(item: string) {
+    this.items.update(items => [...items, item]);
+  }
+
+  toggleSelection(item: string) {
+    // This is why we use linkedSignal - we can manually modify the selection
+    this.selectedItems.update(selected =>
+      selected.includes(item)
+        ? selected.filter(i => i !== item)
+        : [...selected, item]
+    );
+  }
+}
+```
+
+#### Best Practices for linkedSignal
+
+1. **Use for derived state that needs manual control** - when you need both automatic updates and manual overrides
+2. **Ideal for accumulating data** - building lists, histories, or aggregations over time
+3. **Handle edge cases in computation** - check for null/undefined previous values
+4. **Keep computations pure** - avoid side effects in the computation function
+5. **Consider performance** - linkedSignal creates an additional signal, use sparingly for simple cases
+6. **Prefer computed for read-only derived state** - only use linkedSignal when you need writability
 
 ### Reading Without Tracking Dependencies
 
@@ -1381,22 +2865,439 @@ getExpensiveValue() {
 }
 ```
 
-### Migration from RxJS
+### RxJS Interoperability
 
-Signals can work alongside RxJS observables:
+Angular provides several utilities to seamlessly integrate signals with RxJS observables, allowing you to migrate gradually and use both reactive systems together.
+
+#### toSignal - Convert Observable to Signal
 
 ```typescript
-import { signal } from '@angular/core';
-import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { Component, OnInit } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { interval, map, startWith } from 'rxjs';
 
-// Convert signal to observable
-const count = signal(0);
-const count$ = toObservable(count);
+@Component({
+  selector: 'app-signal-conversion',
+  template: `
+    <div>
+      <h3>User Data</h3>
+      @if (userData()) {
+        <p>Name: {{ userData()?.name }}</p>
+        <p>Email: {{ userData()?.email }}</p>
+      } @else {
+        <p>Loading...</p>
+      }
 
-// Convert observable to signal
-const data$ = this.http.get('/api/data');
-const data = toSignal(data$, { initialValue: null });
+      <h3>Timer</h3>
+      <p>Current time: {{ currentTime() }}</p>
+
+      <h3>Counter</h3>
+      <p>Count: {{ counter() }}</p>
+    </div>
+  `
+})
+export class SignalConversionComponent {
+  private http = inject(HttpClient);
+
+  // Convert HTTP observable to signal with initial value
+  userData = toSignal(
+    this.http.get<User>('/api/user'),
+    { initialValue: null }
+  );
+
+  // Convert timer observable to signal
+  currentTime = toSignal(
+    interval(1000).pipe(
+      map(() => new Date().toLocaleTimeString())
+    ),
+    { initialValue: new Date().toLocaleTimeString() }
+  );
+
+  // Convert counter with initial value using startWith
+  counter = toSignal(
+    interval(1000).pipe(
+      startWith(0),
+      map(count => count + 1)
+    )
+  );
+
+  // Handle errors with toSignal
+  weatherData = toSignal(
+    this.http.get('/api/weather').pipe(
+      catchError(error => {
+        console.error('Weather API error:', error);
+        return of({ temperature: 'N/A', condition: 'Unknown' });
+      })
+    ),
+    { initialValue: { temperature: 'Loading...', condition: 'Loading...' } }
+  );
+}
 ```
+
+#### toObservable - Convert Signal to Observable
+
+```typescript
+import { Component, signal } from '@angular/core';
+import { toObservable } from '@angular/core/rxjs-interop';
+import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs';
+
+@Component({
+  selector: 'app-observable-conversion',
+  template: `
+    <div>
+      <input
+        [value]="searchTerm()"
+        (input)="updateSearchTerm($event)"
+        placeholder="Search users...">
+
+      <div class="results">
+        @for (user of searchResults(); track user.id) {
+          <div class="user">{{ user.name }}</div>
+        }
+      </div>
+
+      <div class="analytics">
+        <p>Search performed {{ searchCount() }} times</p>
+        <p>Last search: {{ lastSearchTime() | date:'medium' }}</p>
+      </div>
+    </div>
+  `
+})
+export class ObservableConversionComponent {
+  searchTerm = signal('');
+  searchCount = signal(0);
+  lastSearchTime = signal<Date | null>(null);
+
+  // Convert signal to observable for complex RxJS operations
+  searchTerm$ = toObservable(this.searchTerm);
+
+  // Use RxJS operators on the signal-derived observable
+  searchResults = toSignal(
+    this.searchTerm$.pipe(
+      debounceTime(300),
+      distinctUntilChanged(),
+      switchMap(term => {
+        if (!term.trim()) {
+          return of([]);
+        }
+
+        this.searchCount.update(count => count + 1);
+        this.lastSearchTime.set(new Date());
+
+        return this.http.get<User[]>(`/api/users/search?q=${term}`);
+      })
+    ),
+    { initialValue: [] as User[] }
+  );
+
+  updateSearchTerm(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.searchTerm.set(target.value);
+  }
+
+  constructor(private http: HttpClient) {}
+}
+```
+
+#### outputFromObservable - Convert Observable to Output
+
+```typescript
+import { Component, outputFromObservable } from '@angular/core';
+import { Subject, fromEvent, throttleTime, map } from 'rxjs';
+
+@Component({
+  selector: 'app-scroll-detector',
+  template: `
+    <div
+      #scrollArea
+      class="scroll-area"
+      (scroll)="onScroll($event)">
+      <div class="content">
+        <!-- Long content that requires scrolling -->
+        @for (item of items; track $index) {
+          <div class="item">Item {{ item }}</div>
+        }
+      </div>
+    </div>
+  `
+})
+export class ScrollDetectorComponent implements AfterViewInit {
+  @ViewChild('scrollArea') scrollArea!: ElementRef<HTMLDivElement>;
+
+  items = Array.from({ length: 100 }, (_, i) => i + 1);
+
+  private scrollSubject = new Subject<Event>();
+
+  // Convert observable to output for parent components
+  scrollPosition = outputFromObservable(
+    this.scrollSubject.pipe(
+      throttleTime(100),
+      map(event => {
+        const element = event.target as HTMLElement;
+        return {
+          scrollTop: element.scrollTop,
+          scrollHeight: element.scrollHeight,
+          clientHeight: element.clientHeight,
+          percentage: (element.scrollTop / (element.scrollHeight - element.clientHeight)) * 100
+        };
+      })
+    )
+  );
+
+  // Another example - mouse movement tracking
+  mousePosition = outputFromObservable(
+    fromEvent<MouseEvent>(document, 'mousemove').pipe(
+      throttleTime(50),
+      map(event => ({ x: event.clientX, y: event.clientY }))
+    )
+  );
+
+  onScroll(event: Event) {
+    this.scrollSubject.next(event);
+  }
+
+  ngAfterViewInit() {
+    // Can also create outputs from DOM events directly
+    const resizeOutput = outputFromObservable(
+      fromEvent(window, 'resize').pipe(
+        throttleTime(250),
+        map(() => ({
+          width: window.innerWidth,
+          height: window.innerHeight
+        }))
+      )
+    );
+  }
+}
+
+// Usage in parent component:
+@Component({
+  template: `
+    <app-scroll-detector
+      (scrollPosition)="onScrollUpdate($event)"
+      (mousePosition)="onMouseMove($event)">
+    </app-scroll-detector>
+
+    <div class="status">
+      <p>Scroll: {{ scrollInfo?.percentage.toFixed(1) }}%</p>
+      <p>Mouse: {{ mouseInfo?.x }}, {{ mouseInfo?.y }}</p>
+    </div>
+  `
+})
+export class ParentComponent {
+  scrollInfo: any = null;
+  mouseInfo: any = null;
+
+  onScrollUpdate(info: any) {
+    this.scrollInfo = info;
+  }
+
+  onMouseMove(position: any) {
+    this.mouseInfo = position;
+  }
+}
+```
+
+#### outputToObservable - Convert Output to Observable
+
+```typescript
+import { Component, ViewChild, AfterViewInit } from '@angular/core';
+import { outputToObservable } from '@angular/core/rxjs-interop';
+import { debounceTime, distinctUntilChanged } from 'rxjs';
+
+@Component({
+  selector: 'app-form-observer',
+  template: `
+    <div>
+      <app-custom-input
+        #customInput
+        [label]="'Username'"
+        [placeholder]="'Enter username'"
+        (valueChange)="onValueChange($event)"
+        (validationChange)="onValidationChange($event)">
+      </app-custom-input>
+
+      <div class="feedback">
+        <p>Real-time: {{ realtimeValue }}</p>
+        <p>Debounced: {{ debouncedValue }}</p>
+        <p>Valid: {{ isValid }}</p>
+      </div>
+    </div>
+  `
+})
+export class FormObserverComponent implements AfterViewInit {
+  @ViewChild('customInput') customInput!: CustomInputComponent;
+
+  realtimeValue = '';
+  debouncedValue = '';
+  isValid = true;
+
+  ngAfterViewInit() {
+    // Convert output to observable for advanced RxJS operations
+    const valueChange$ = outputToObservable(this.customInput.valueChange);
+    const validationChange$ = outputToObservable(this.customInput.validationChange);
+
+    // Debounce value changes
+    valueChange$.pipe(
+      debounceTime(500),
+      distinctUntilChanged()
+    ).subscribe(value => {
+      this.debouncedValue = value;
+      console.log('Debounced value:', value);
+    });
+
+    // React to validation changes
+    validationChange$.subscribe(validation => {
+      this.isValid = validation.isValid;
+    });
+
+    // Combine multiple outputs
+    combineLatest([valueChange$, validationChange$]).subscribe(
+      ([value, validation]) => {
+        console.log('Combined update:', { value, validation });
+      }
+    );
+  }
+
+  onValueChange(value: string) {
+    this.realtimeValue = value;
+  }
+
+  onValidationChange(validation: any) {
+    // Handle immediate validation feedback
+  }
+}
+```
+
+#### Advanced Interoperability Patterns
+
+```typescript
+@Component({
+  selector: 'app-hybrid-data-flow',
+  template: `
+    <div>
+      <button (click)="refresh()">Refresh</button>
+
+      @if (isLoading()) {
+        <div>Loading...</div>
+      } @else {
+        <div class="data-grid">
+          @for (item of processedData(); track item.id) {
+            <div class="item">{{ item.displayName }}</div>
+          }
+        </div>
+      }
+
+      <div class="stats">
+        <p>Refresh count: {{ refreshCount() }}</p>
+        <p>Last update: {{ lastUpdate() | date:'medium' }}</p>
+      </div>
+    </div>
+  `
+})
+export class HybridDataFlowComponent implements OnInit {
+  // Signals for simple state
+  refreshCount = signal(0);
+  lastUpdate = signal<Date | null>(null);
+  isLoading = signal(false);
+
+  // Manual refresh trigger
+  private refreshTrigger = new Subject<void>();
+
+  // Complex data fetching using observables
+  private data$ = this.refreshTrigger.pipe(
+    startWith(null), // Initial load
+    tap(() => this.isLoading.set(true)),
+    switchMap(() =>
+      this.http.get<RawData[]>('/api/data').pipe(
+        tap(() => {
+          this.refreshCount.update(count => count + 1);
+          this.lastUpdate.set(new Date());
+          this.isLoading.set(false);
+        }),
+        catchError(error => {
+          this.isLoading.set(false);
+          console.error('Data fetch error:', error);
+          return of([]);
+        })
+      )
+    ),
+    shareReplay(1)
+  );
+
+  // Convert observable back to signal for template use
+  rawData = toSignal(this.data$, { initialValue: [] as RawData[] });
+
+  // Use computed signal for data transformation
+  processedData = computed(() =>
+    this.rawData().map(item => ({
+      ...item,
+      displayName: `${item.name} (${item.category})`
+    }))
+  );
+
+  // Convert signals back to observables for side effects
+  refreshCount$ = toObservable(this.refreshCount);
+
+  ngOnInit() {
+    // Use RxJS for complex side effects
+    this.refreshCount$.pipe(
+      filter(count => count > 0),
+      debounceTime(1000)
+    ).subscribe(count => {
+      console.log(`Data refreshed ${count} times`);
+      // Analytics or logging
+    });
+  }
+
+  refresh() {
+    this.refreshTrigger.next();
+  }
+
+  constructor(private http: HttpClient) {}
+}
+```
+
+#### Migration Strategies
+
+```typescript
+// Step 1: Start with observables, gradually convert to signals
+@Component({})
+export class MigrationExampleComponent {
+  // Legacy: Pure observable approach
+  legacyData$ = this.http.get('/api/legacy');
+
+  // Hybrid: Observable converted to signal
+  hybridData = toSignal(this.http.get('/api/hybrid'), { initialValue: null });
+
+  // Modern: Pure signal approach with resource
+  modernData = resource({
+    loader: () => this.http.get('/api/modern').toPromise()
+  });
+
+  // Gradual migration of computed values
+  // Old: Observable-based computed
+  legacyCount$ = this.legacyData$.pipe(
+    map(data => data?.items?.length || 0)
+  );
+
+  // New: Signal-based computed
+  hybridCount = computed(() => this.hybridData()?.items?.length || 0);
+  modernCount = computed(() => this.modernData.value()?.items?.length || 0);
+}
+```
+
+#### Best Practices for RxJS Integration
+
+1. **Use toSignal for converting observables** that you primarily read in templates
+2. **Use toObservable for complex RxJS operations** on signal data
+3. **Use outputFromObservable** for creating reactive outputs from observables
+4. **Use outputToObservable** when you need RxJS operators on component outputs
+5. **Gradual migration** - start with critical paths, migrate incrementally
+6. **Prefer signals for simple state** - use observables for complex async flows
+7. **Always provide initialValue** with toSignal to avoid undefined states
+8. **Combine both approaches** - signals for state, observables for streams
 
 ### Best Practices Summary
 
