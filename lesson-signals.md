@@ -483,6 +483,489 @@ export class UserProfileComponent {
 }
 ```
 
+## Signal Outputs
+
+Signal outputs provide a modern, type-safe way to emit events from child components to their parents using the reactive power of signals. As of Angular 20, signal outputs are the recommended approach for component event emission.
+
+### Basic Signal Outputs
+
+```typescript
+import { Component, output } from '@angular/core';
+
+@Component({
+  selector: 'app-button',
+  template: `
+    <button
+      [disabled]="disabled()"
+      (click)="handleClick()"
+      class="custom-button">
+      {{ label() }}
+    </button>
+  `
+})
+export class ButtonComponent {
+  // Input for button configuration
+  label = input('Click me');
+  disabled = input(false);
+
+  // Output for click events
+  clicked = output<void>();
+
+  // Output with data
+  buttonPressed = output<{ timestamp: number; label: string }>();
+
+  handleClick() {
+    // Emit simple event
+    this.clicked.emit();
+
+    // Emit event with data
+    this.buttonPressed.emit({
+      timestamp: Date.now(),
+      label: this.label()
+    });
+  }
+}
+```
+
+### Output with Custom Data Types
+
+```typescript
+interface UserAction {
+  action: 'create' | 'update' | 'delete';
+  userId: number;
+  data?: any;
+}
+
+@Component({
+  selector: 'app-user-list',
+  template: `
+    <div class="user-list">
+      @for (user of users(); track user.id) {
+        <div class="user-item">
+          <span>{{ user.name }}</span>
+          <button (click)="editUser(user)">Edit</button>
+          <button (click)="deleteUser(user)">Delete</button>
+        </div>
+      }
+      <button (click)="createUser()">Add User</button>
+    </div>
+  `
+})
+export class UserListComponent {
+  users = input.required<User[]>();
+
+  // Output for user actions
+  userAction = output<UserAction>();
+
+  editUser(user: User) {
+    this.userAction.emit({
+      action: 'update',
+      userId: user.id,
+      data: user
+    });
+  }
+
+  deleteUser(user: User) {
+    this.userAction.emit({
+      action: 'delete',
+      userId: user.id
+    });
+  }
+
+  createUser() {
+    this.userAction.emit({
+      action: 'create',
+      userId: 0
+    });
+  }
+}
+```
+
+### Using Signal Outputs in Parent Components
+
+```typescript
+@Component({
+  selector: 'app-parent',
+  template: `
+    <div>
+      <h2>Button Demo</h2>
+      <app-button
+        [label]="buttonLabel()"
+        [disabled]="isButtonDisabled()"
+        (clicked)="onButtonClicked()"
+        (buttonPressed)="onButtonPressed($event)">
+      </app-button>
+
+      <h2>User Management</h2>
+      <app-user-list
+        [users]="users()"
+        (userAction)="handleUserAction($event)">
+      </app-user-list>
+
+      <div class="status">
+        <p>Last action: {{ lastAction() }}</p>
+        <p>Button clicked: {{ clickCount() }} times</p>
+      </div>
+    </div>
+  `
+})
+export class ParentComponent {
+  // State signals
+  buttonLabel = signal('Custom Button');
+  isButtonDisabled = signal(false);
+  clickCount = signal(0);
+  lastAction = signal('None');
+
+  users = signal<User[]>([
+    { id: 1, name: 'Alice', email: 'alice@example.com' },
+    { id: 2, name: 'Bob', email: 'bob@example.com' }
+  ]);
+
+  onButtonClicked() {
+    this.clickCount.update(count => count + 1);
+    this.lastAction.set('Button clicked');
+  }
+
+  onButtonPressed(data: { timestamp: number; label: string }) {
+    console.log('Button pressed at:', new Date(data.timestamp));
+    console.log('Button label:', data.label);
+    this.lastAction.set(`Button "${data.label}" pressed`);
+  }
+
+  handleUserAction(action: UserAction) {
+    this.lastAction.set(`User ${action.action} action`);
+
+    switch (action.action) {
+      case 'create':
+        // Handle user creation
+        console.log('Creating new user');
+        break;
+      case 'update':
+        // Handle user update
+        console.log('Updating user:', action.userId);
+        break;
+      case 'delete':
+        // Handle user deletion
+        this.users.update(users =>
+          users.filter(user => user.id !== action.userId)
+        );
+        break;
+    }
+  }
+}
+```
+
+### Output Aliases
+
+You can provide aliases for outputs for backward compatibility or naming conventions:
+
+```typescript
+@Component({
+  selector: 'app-search-box',
+  template: `
+    <input
+      [value]="searchQuery()"
+      (input)="onSearchInput($event)"
+      (keyup.enter)="onSearchSubmit()"
+      placeholder="Search...">
+    <button (click)="clearSearch()">Clear</button>
+  `
+})
+export class SearchBoxComponent {
+  searchQuery = signal('');
+
+  // Output with alias for backward compatibility
+  searchChanged = output<string>({ alias: 'search' });
+  searchSubmitted = output<string>({ alias: 'submit' });
+  searchCleared = output<void>({ alias: 'clear' });
+
+  onSearchInput(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.searchQuery.set(target.value);
+    this.searchChanged.emit(target.value);
+  }
+
+  onSearchSubmit() {
+    this.searchSubmitted.emit(this.searchQuery());
+  }
+
+  clearSearch() {
+    this.searchQuery.set('');
+    this.searchCleared.emit();
+  }
+}
+
+// Usage in parent template:
+// <app-search-box
+//   (search)="onSearch($event)"
+//   (submit)="onSubmit($event)"
+//   (clear)="onClear()">
+// </app-search-box>
+```
+
+### Advanced Output Patterns
+
+#### Conditional Outputs
+
+```typescript
+@Component({
+  selector: 'app-form-field',
+  template: `
+    <div class="form-field">
+      <label>{{ label() }}</label>
+      <input
+        [value]="value()"
+        [type]="inputType()"
+        (input)="onValueChange($event)"
+        (focus)="onFocus()"
+        (blur)="onBlur()">
+
+      @if (showValidation() && errorMessage()) {
+        <span class="error">{{ errorMessage() }}</span>
+      }
+    </div>
+  `
+})
+export class FormFieldComponent {
+  // Inputs
+  label = input('Field');
+  value = input('');
+  inputType = input<'text' | 'email' | 'password'>('text');
+  showValidation = input(true);
+  required = input(false);
+
+  // Outputs
+  valueChange = output<string>();
+  validationChange = output<{ isValid: boolean; error?: string }>();
+  focused = output<void>();
+  blurred = output<void>();
+
+  // Internal state
+  private isTouched = signal(false);
+
+  // Computed validation
+  errorMessage = computed(() => {
+    if (!this.isTouched() || !this.showValidation()) return null;
+
+    const value = this.value();
+    if (this.required() && !value.trim()) {
+      return 'This field is required';
+    }
+
+    if (this.inputType() === 'email' && value) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(value)) {
+        return 'Invalid email format';
+      }
+    }
+
+    return null;
+  });
+
+  isValid = computed(() => !this.errorMessage());
+
+  constructor() {
+    // Emit validation changes
+    effect(() => {
+      this.validationChange.emit({
+        isValid: this.isValid(),
+        error: this.errorMessage() || undefined
+      });
+    });
+  }
+
+  onValueChange(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.valueChange.emit(target.value);
+  }
+
+  onFocus() {
+    this.focused.emit();
+  }
+
+  onBlur() {
+    this.isTouched.set(true);
+    this.blurred.emit();
+  }
+}
+```
+
+#### Output Chaining and Composition
+
+```typescript
+@Component({
+  selector: 'app-wizard-step',
+  template: `
+    <div class="wizard-step">
+      <h3>{{ title() }}</h3>
+      <div class="step-content">
+        <ng-content></ng-content>
+      </div>
+
+      <div class="step-actions">
+        <button
+          [disabled]="!canGoPrevious()"
+          (click)="onPrevious()">
+          Previous
+        </button>
+        <button
+          [disabled]="!canGoNext()"
+          (click)="onNext()">
+          Next
+        </button>
+        @if (isLastStep()) {
+          <button
+            [disabled]="!isValid()"
+            (click)="onComplete()">
+            Complete
+          </button>
+        }
+      </div>
+    </div>
+  `
+})
+export class WizardStepComponent {
+  // Inputs
+  title = input.required<string>();
+  isValid = input(true);
+  canGoPrevious = input(true);
+  canGoNext = input(true);
+  isLastStep = input(false);
+
+  // Outputs
+  stepChange = output<'previous' | 'next'>();
+  wizardComplete = output<void>();
+  stepValidation = output<boolean>();
+
+  constructor() {
+    // Emit validation changes
+    effect(() => {
+      this.stepValidation.emit(this.isValid());
+    });
+  }
+
+  onPrevious() {
+    if (this.canGoPrevious()) {
+      this.stepChange.emit('previous');
+    }
+  }
+
+  onNext() {
+    if (this.canGoNext()) {
+      this.stepChange.emit('next');
+    }
+  }
+
+  onComplete() {
+    if (this.isValid()) {
+      this.wizardComplete.emit();
+    }
+  }
+}
+
+// Multi-step wizard using composed outputs
+@Component({
+  selector: 'app-wizard',
+  template: `
+    <div class="wizard">
+      @for (step of steps(); track step.id; let i = $index) {
+        @if (i === currentStep()) {
+          <app-wizard-step
+            [title]="step.title"
+            [isValid]="step.isValid"
+            [canGoPrevious]="i > 0"
+            [canGoNext]="step.isValid && i < steps().length - 1"
+            [isLastStep]="i === steps().length - 1"
+            (stepChange)="onStepChange($event, i)"
+            (wizardComplete)="onWizardComplete()"
+            (stepValidation)="onStepValidation($event, i)">
+
+            <!-- Dynamic step content -->
+            <ng-container [ngSwitch]="step.id">
+              <div *ngSwitchCase="'personal'">Personal Information Form</div>
+              <div *ngSwitchCase="'address'">Address Information Form</div>
+              <div *ngSwitchCase="'payment'">Payment Information Form</div>
+              <div *ngSwitchCase="'review'">Review and Confirm</div>
+            </ng-container>
+          </app-wizard-step>
+        }
+      }
+    </div>
+  `
+})
+export class WizardComponent {
+  currentStep = signal(0);
+
+  steps = signal([
+    { id: 'personal', title: 'Personal Info', isValid: false },
+    { id: 'address', title: 'Address', isValid: false },
+    { id: 'payment', title: 'Payment', isValid: false },
+    { id: 'review', title: 'Review', isValid: true }
+  ]);
+
+  // Wizard outputs
+  wizardCompleted = output<any>();
+  stepChanged = output<{ from: number; to: number }>();
+
+  onStepChange(direction: 'previous' | 'next', currentIndex: number) {
+    const newStep = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+
+    this.stepChanged.emit({
+      from: currentIndex,
+      to: newStep
+    });
+
+    this.currentStep.set(newStep);
+  }
+
+  onStepValidation(isValid: boolean, stepIndex: number) {
+    this.steps.update(steps =>
+      steps.map((step, index) =>
+        index === stepIndex ? { ...step, isValid } : step
+      )
+    );
+  }
+
+  onWizardComplete() {
+    const wizardData = {
+      completedAt: new Date(),
+      steps: this.steps()
+    };
+
+    this.wizardCompleted.emit(wizardData);
+  }
+}
+```
+
+### Best Practices for Signal Outputs
+
+1. **Use descriptive names** that clearly indicate what the output represents
+2. **Provide type information** for output data to ensure type safety
+3. **Keep output data minimal** - only emit what the parent needs
+4. **Use aliases** for backward compatibility when renaming outputs
+5. **Document output behavior** - when they emit and what data they contain
+6. **Consider using computed signals** to conditionally emit outputs
+7. **Avoid emitting on every signal change** - use effects wisely
+8. **Group related outputs** when it makes sense for the API
+
+### When to Use Signal Outputs
+
+Use signal outputs when:
+- Creating reusable components that need to communicate with parents
+- Building form controls that emit validation states
+- Implementing components that trigger actions in parent components
+- Creating event-driven architectures
+- Building components that act as user interface controls
+
+Examples of good use cases:
+- Form field validation events
+- Button click events with data
+- Modal dialog results
+- Search box queries
+- Pagination events
+- File upload progress
+- Game events and actions
+
 ## Model Inputs
 
 Model inputs enable two-way data binding between parent and child components using signals. They allow a component to both receive values from and send values back to its parent.
